@@ -1,6 +1,6 @@
 # GoogleTakeoutFixer
 
-A tool that will soon allow you to easily merge Google's weird json metadata with your images.
+A tool that will soon allow you to easily merge Google's weird JSON metadata with your images.
 
 > [!IMPORTANT]
 > This project is still in early development. Not ready for use yet.
