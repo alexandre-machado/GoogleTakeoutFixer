@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"encoding/json"
@@ -19,29 +19,14 @@ type imageMetadata struct {
 	} `json:"photoTakenTime"`
 }
 
-var InputPath string
-var OutputPath string
+func ProcessTakeout(inputPath string, outputPath string) {
+	var allFolders []os.DirEntry = FindDirs(inputPath)
+	var yearFolders, albumFolders = FindYearAlbumFolders(allFolders)
 
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("Flags missing! Enter InputPath (path of your takeout) and OutputPath (where your fixed files will be located).")
-		return
-	}
-
-	InputPath = os.Args[1]
-	OutputPath = os.Args[2]
-
-	processTakeout(InputPath, OutputPath)
+	CreateFixedImageFolder(inputPath, outputPath, yearFolders, albumFolders)
 }
 
-func processTakeout(inputPath string, outputPath string) {
-	var allFolders []os.DirEntry = findDirs(inputPath)
-	var yearFolders, albumFolders = findYearAlbumFolders(allFolders)
-
-	createFixedImageFolder(inputPath, outputPath, yearFolders, albumFolders)
-}
-
-func createFixedImageFolder(baseInputPath string, outputFolder string, yearFolders []os.DirEntry, albumFolders []os.DirEntry) {
+func CreateFixedImageFolder(baseInputPath string, outputFolder string, yearFolders []os.DirEntry, albumFolders []os.DirEntry) {
 	outputDir := filepath.Join(outputFolder, "output")
 	if err := os.Mkdir(outputDir, os.ModePerm); err != nil {
 		fmt.Println(err)
@@ -59,12 +44,12 @@ func createFixedImageFolder(baseInputPath string, outputFolder string, yearFolde
 		yearPath := filepath.Join(baseInputPath, curYearDir.Name())
 		fmt.Printf("Reading year directory: %s\n", yearPath)
 
-		files := readDirectory(yearPath)
-		processFiles(files, yearPath, outputFolder)
+		files := ReadDirectory(yearPath)
+		ProcessFiles(files, yearPath, outputFolder)
 	}
 }
 
-func readDirectory(path string) []os.DirEntry {
+func ReadDirectory(path string) []os.DirEntry {
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		fmt.Printf("Error reading directory %s: %v\n", path, err)
@@ -73,7 +58,7 @@ func readDirectory(path string) []os.DirEntry {
 	return entries
 }
 
-func processFiles(files []os.DirEntry, basePath string, outputFolder string) {
+func ProcessFiles(files []os.DirEntry, basePath string, outputFolder string) {
 	for _, entry := range files {
 		filePath := filepath.Join(basePath, entry.Name())
 
@@ -82,7 +67,7 @@ func processFiles(files []os.DirEntry, basePath string, outputFolder string) {
 			continue
 		}
 
-		if isNameExtension(".json", entry.Name()) {
+		if IsNameExtension(".json", entry.Name()) {
 			continue
 		}
 
@@ -91,37 +76,37 @@ func processFiles(files []os.DirEntry, basePath string, outputFolder string) {
 
 		outputPath := filepath.Join(outputFolder, entry.Name())
 
-		if hasSidecarFile(filePath, ".supplemental-m.json") {
-			duplicateAndFixImage(filePath, outputPath, ".supplemental-m.json")
-		} else if hasSidecarFile(filePath, ".supplemental-metadata.json") {
-			duplicateAndFixImage(filePath, outputPath, ".supplemental-metadata.json")
+		if HasSidecarFile(filePath, ".supplemental-m.json") {
+			DuplicateAndFixImage(filePath, outputPath, ".supplemental-m.json")
+		} else if HasSidecarFile(filePath, ".supplemental-metadata.json") {
+			DuplicateAndFixImage(filePath, outputPath, ".supplemental-metadata.json")
 		} else {
 			fmt.Println("no image metadata json found for " + filePath)
 		}
 	}
 }
 
-func duplicateAndFixImage(filePath string, outputPath string, metdataExtension string) {
-	if err := duplicateFile(filePath, outputPath); err != nil {
+func DuplicateAndFixImage(filePath string, outputPath string, metdataExtension string) {
+	if err := DuplicateFile(filePath, outputPath); err != nil {
 		fmt.Printf("Error while duplicating: %v\n", err)
 		return
 	}
 
 	jsonPath := filePath + metdataExtension
-	meta, err := readMetadata(jsonPath)
+	meta, err := ReadMetadata(jsonPath)
 	if err != nil {
 		fmt.Printf("Error reading metadata(%s): %v\n", jsonPath, err)
 		return
 	}
 
-	if err := applyFileTime(outputPath, meta); err != nil {
+	if err := ApplyFileTime(outputPath, meta); err != nil {
 		fmt.Printf("Error setting timestamp: %v\n", err)
 	} else {
 		fmt.Printf("Image fixed: %s\n", outputPath)
 	}
 }
 
-func applyFileTime(filePath string, meta imageMetadata) error {
+func ApplyFileTime(filePath string, meta imageMetadata) error {
 	timestampInt, err := strconv.ParseInt(meta.PhotoTakenTime.Timestamp, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid timestamp: %v", err)
@@ -131,7 +116,7 @@ func applyFileTime(filePath string, meta imageMetadata) error {
 	return os.Chtimes(filePath, newTime, newTime)
 }
 
-func readMetadata(jsonPath string) (imageMetadata, error) {
+func ReadMetadata(jsonPath string) (imageMetadata, error) {
 	var data imageMetadata
 
 	jsonFile, err := os.Open(jsonPath)
@@ -149,7 +134,7 @@ func readMetadata(jsonPath string) (imageMetadata, error) {
 	return data, err
 }
 
-func duplicateFile(source string, destination string) error {
+func DuplicateFile(source string, destination string) error {
 	sourceFile, err := os.Open(source)
 	if err != nil {
 		return err
@@ -166,7 +151,7 @@ func duplicateFile(source string, destination string) error {
 	return err
 }
 
-func findYearAlbumFolders(albums []os.DirEntry) ([]os.DirEntry, []os.DirEntry) {
+func FindYearAlbumFolders(albums []os.DirEntry) ([]os.DirEntry, []os.DirEntry) {
 	// todo: add language support
 	re := regexp.MustCompile(`^Photos from \d+$`)
 
@@ -187,7 +172,7 @@ func findYearAlbumFolders(albums []os.DirEntry) ([]os.DirEntry, []os.DirEntry) {
 	return yearFolders, albumFolders
 }
 
-func findDirs(path string) []os.DirEntry {
+func FindDirs(path string) []os.DirEntry {
 	var dirlist []os.DirEntry
 
 	files, err := os.ReadDir(path)
@@ -206,12 +191,12 @@ func findDirs(path string) []os.DirEntry {
 	return dirlist
 }
 
-func hasSidecarFile(originalPath string, suffix string) bool {
+func HasSidecarFile(originalPath string, suffix string) bool {
 	sidecarPath := originalPath + suffix
 	_, err := os.Stat(sidecarPath)
 	return err == nil
 }
 
-func isNameExtension(extension string, path string) bool {
+func IsNameExtension(extension string, path string) bool {
 	return strings.EqualFold(filepath.Ext(path), extension)
 }
