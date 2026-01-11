@@ -1,4 +1,4 @@
-package internal
+package fixer
 
 import (
 	"encoding/json"

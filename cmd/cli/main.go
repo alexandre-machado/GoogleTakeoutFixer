@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/feloex/GoogleTakeoutFixer/internal"
+	"github.com/feloex/GoogleTakeoutFixer/internal/fixer"
 )
 
 func main() {
@@ -16,5 +16,5 @@ func main() {
 	var InputPath = os.Args[1]
 	var OutputPath = os.Args[2]
 
-	internal.ProcessTakeout(InputPath, OutputPath)
+	fixer.ProcessTakeout(InputPath, OutputPath)
 }
