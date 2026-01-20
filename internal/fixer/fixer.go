@@ -14,8 +14,7 @@ func ProcessTakeout(inputPath string, outputPath string) {
 }
 
 func CreateFixedImageFolder(baseInputPath string, outputFolder string, yearFolders []os.DirEntry, albumFolders []os.DirEntry) {
-	outputDir := filepath.Join(outputFolder, "output")
-	if err := os.Mkdir(outputDir, os.ModePerm); err != nil {
+	if err := os.Mkdir(outputFolder, os.ModePerm); err != nil {
 		fmt.Println(err)
 	}
 
