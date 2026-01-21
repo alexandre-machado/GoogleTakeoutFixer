@@ -57,6 +57,8 @@ func ProcessFiles(files []os.DirEntry, basePath string, outputFolder string) {
 			DuplicateAndFixImage(filePath, outputPath, ".supplemental-m.json")
 		} else if HasSidecarFile(filePath, ".supplemental-metadata.json") {
 			DuplicateAndFixImage(filePath, outputPath, ".supplemental-metadata.json")
+		} else if HasSidecarFile(filePath, ".supplemental-metada.json") {
+			DuplicateAndFixImage(filePath, outputPath, ".supplemental-metada.json")
 		} else {
 			fmt.Println("no image metadata json found for " + filePath)
 		}
