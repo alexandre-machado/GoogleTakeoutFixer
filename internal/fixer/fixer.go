@@ -31,11 +31,16 @@ func CreateFixedImageFolder(baseInputPath string, outputFolder string, yearFolde
 		fmt.Printf("Reading year directory: %s\n", yearPath)
 
 		files := ReadDirectory(yearPath)
-		ProcessFiles(files, yearPath, outputFolder)
+		ProcessFiles(files, yearPath, outputFolder, curYearDir.Name())
 	}
 }
 
-func ProcessFiles(files []os.DirEntry, basePath string, outputFolder string) {
+func ProcessFiles(files []os.DirEntry, basePath string, outputFolder string, curyearDir string) {
+	var FullNewFilePath = filepath.Join(outputFolder, curyearDir)
+	err := os.MkdirAll(FullNewFilePath, 0755)
+	if err != nil {
+		println("error while creating curyearDir folder")
+	}
 	for _, entry := range files {
 		filePath := filepath.Join(basePath, entry.Name())
 
@@ -51,7 +56,7 @@ func ProcessFiles(files []os.DirEntry, basePath string, outputFolder string) {
 		fmt.Printf("Found file: %s\n", filePath)
 		fmt.Println("File name:  ", entry.Name())
 
-		outputPath := filepath.Join(outputFolder, entry.Name())
+		outputPath := filepath.Join(FullNewFilePath, entry.Name())
 
 		if HasSidecarFile(filePath, ".supplemental-m.json") {
 			DuplicateAndFixImage(filePath, outputPath, ".supplemental-m.json")
