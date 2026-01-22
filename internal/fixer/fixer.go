@@ -21,6 +21,7 @@ func CreateFixedImageFolder(baseInputPath string, outputFolder string, yearFolde
 	fmt.Printf("%v %v\n", yearFolders, albumFolders)
 	fmt.Printf("Output folder: %v\n", outputFolder)
 
+	// Process year folders
 	for _, curYearDir := range yearFolders {
 		if !curYearDir.IsDir() {
 			fmt.Println("File in YearFolder is not a directory!  ", curYearDir.Name())
@@ -33,13 +34,27 @@ func CreateFixedImageFolder(baseInputPath string, outputFolder string, yearFolde
 		files := ReadDirectory(yearPath)
 		ProcessFiles(files, yearPath, outputFolder, curYearDir.Name())
 	}
+
+	// Process album folders
+	for _, curAlbumDir := range albumFolders {
+		if !curAlbumDir.IsDir() {
+			fmt.Println("File in AlbumFolder is not a directory!  ", curAlbumDir.Name())
+			continue
+		}
+
+		albumPath := filepath.Join(baseInputPath, curAlbumDir.Name())
+		fmt.Printf("Reading album directory: %s\n", albumPath)
+
+		files := ReadDirectory(albumPath)
+		ProcessFiles(files, albumPath, outputFolder, curAlbumDir.Name())
+	}
 }
 
-func ProcessFiles(files []os.DirEntry, basePath string, outputFolder string, curyearDir string) {
-	var FullNewFilePath = filepath.Join(outputFolder, curyearDir)
+func ProcessFiles(files []os.DirEntry, basePath string, outputFolder string, curDir string) {
+	var FullNewFilePath = filepath.Join(outputFolder, curDir)
 	err := os.MkdirAll(FullNewFilePath, 0755)
 	if err != nil {
-		println("error while creating curyearDir folder")
+		println("error while creating folder for ", curDir)
 	}
 	for _, entry := range files {
 		filePath := filepath.Join(basePath, entry.Name())
