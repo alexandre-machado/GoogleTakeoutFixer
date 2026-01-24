@@ -7,6 +7,11 @@ import (
 	"regexp"
 )
 
+// Process is the main fixer entry point.
+// Process
+// -> DiscoverDirs
+// --> ProcessDirectory
+// ---> ProcessFile
 func Process(sourcePath string, outputPath string) error {
 	dirs, err := DiscoverDirs(sourcePath)
 	if err != nil {
@@ -41,6 +46,7 @@ func Process(sourcePath string, outputPath string) error {
 	return nil
 }
 
+// Process a directory and fix all files within the directory. Ignores sub-directories.
 func ProcessDirectory(dirPath string, outputPath string) error {
 	files, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -54,9 +60,9 @@ func ProcessDirectory(dirPath string, outputPath string) error {
 			fmt.Println("file is a dir")
 			continue
 		}
-		//fmt.Println(imagePath)
 
-		// check whether file is a image file
+		// Check whether a file is an image or not
+		// TODO: Add support for any image/video file without hard coding
 		if !IsNameExtension(".jpg", imagePath) && !IsNameExtension(".png", imagePath) {
 			continue
 		}
@@ -68,6 +74,7 @@ func ProcessDirectory(dirPath string, outputPath string) error {
 	return nil
 }
 
+// ProcessFile processes a single file by finding its sidecar file and then fixing it using the sidecar's metadata
 func ProcessFile(sourcePath string, outputPath string) error {
 	sidecarPath := FindSidecar(sourcePath)
 
@@ -91,8 +98,9 @@ func ProcessFile(sourcePath string, outputPath string) error {
 	return nil
 }
 
+// Create a fixed file with fixed metadata
 func CreateFixedFile(filePath string, fileMetadataPath string, outputPath string) error {
-	// ensure output directory exists
+	// Ensure output directory exists
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
 		return err
 	}
@@ -114,7 +122,9 @@ func CreateFixedFile(filePath string, fileMetadataPath string, outputPath string
 	return nil
 }
 
+// Checks whether a directory is a standart google year folder
 func CheckWhetherYear(dirPath string) (bool, error) {
+	// TODO: Add support for non english takeouts
 	re := regexp.MustCompile(`^Photos from \d+$`)
 
 	if re.MatchString(dirPath) {

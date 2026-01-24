@@ -13,6 +13,7 @@ var sidecarSuffixes = []string{
 	".supplemental-metada.json",
 }
 
+// Duplicate a file from one path to another
 func CopyFile(inputPath string, outputPath string) error {
 	sourceFile, err := os.Open(inputPath)
 	if err != nil {
@@ -30,6 +31,7 @@ func CopyFile(inputPath string, outputPath string) error {
 	return err
 }
 
+// Discover directories within a path non recursively
 func DiscoverDirs(path string) ([]os.DirEntry, error) {
 	var dirList []os.DirEntry
 
@@ -48,6 +50,7 @@ func DiscoverDirs(path string) ([]os.DirEntry, error) {
 	return dirList, nil
 }
 
+// Find a matching sidecar JSON
 func FindSidecar(imagePath string) string {
 	for _, suffix := range sidecarSuffixes {
 		p := imagePath + suffix
