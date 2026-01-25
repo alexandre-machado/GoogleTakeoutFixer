@@ -29,6 +29,10 @@ func Process(
 	p := Progress{}
 
 	amountImages, err := CountImagesRecursive(sourcePath)
+	if err != nil {
+		fmt.Println("Error counting images:", err)
+		return err
+	}
 	p.Total = amountImages
 	progressCh <- p
 
@@ -44,11 +48,14 @@ func Process(
 
 	for _, dir := range dirs {
 
-		dirPath := string(sourcePath) + dir.Name()
+		dirPath := filepath.Join(sourcePath, dir.Name())
 
-		var targetPath string = outputPath + dir.Name()
+		var targetPath string = filepath.Join(outputPath, dir.Name())
 
-		ProcessDirectory(dirPath, targetPath, &p, progressCh)
+		err := ProcessDirectory(dirPath, targetPath, &p, progressCh)
+		if err != nil {
+			fmt.Println("Error processing directory:", dirPath, err)
+		}
 	}
 
 	return nil
