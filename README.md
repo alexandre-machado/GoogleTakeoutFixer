@@ -1,5 +1,9 @@
 # GoogleTakeoutFixer
 
+<p align="center">
+    <img src="images/GoogleTakeoutFixer.png" alt="drawing" width="200"/>
+</p>
+
 A tool that will soon allow you to easily merge Google's weird JSON metadata with your images.
 
 > [!IMPORTANT]
