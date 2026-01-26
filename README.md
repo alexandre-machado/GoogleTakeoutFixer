@@ -22,3 +22,6 @@ GoogleTakeoutFixer automatically reads the JSON files and writes the metadata ba
 - A simple, user friendly GUI
 - Language support for non english takeouts (only "Photos from (year)" works currently)
 - Progress tracking
+
+## Disclaimer
+This project is an **independent open-source project** and is **not affiliated with, endorsed, or sponsored by Google LLC or any of its subsidaries**. The use of the name "Google" in this repository is solely for descriptive purposes.
