@@ -1,4 +1,4 @@
-package main
+package gui
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 	"github.com/ncruces/zenity"
 )
 
-func main() {
+func Main() {
 	var inputPath, outputPath string
 
 	// Create app / window

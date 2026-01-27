@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/feloex/GoogleTakeoutFixer/internal/fixer"
 )
 
-func main() {
+func Main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Flags missing! Enter InputPath and OutputPath.")
 		return
