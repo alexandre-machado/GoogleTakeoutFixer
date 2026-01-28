@@ -20,6 +20,8 @@ func Main() {
 	a.SetIcon(resourceGoogleTakeoutFixerPng)
 	w := a.NewWindow("GoogleTakeoutFixer")
 
+	var useSymlinks bool = false
+
 	progressLabel := widget.NewLabel("")
 	progressBar := widget.NewProgressBar()
 
@@ -38,6 +40,11 @@ func Main() {
 			outputPath = dir
 			fmt.Println("Output folder:", outputPath)
 		}
+	})
+
+	UseLinksCheckbox := widget.NewCheck("Use symlinks for albums", func(value bool) {
+		useSymlinks = value
+		fmt.Println("use symlinks", useSymlinks)
 	})
 
 	// Button to start processing
@@ -59,7 +66,7 @@ func Main() {
 		progressCh := make(chan fixer.Progress)
 
 		go func() {
-			if err := fixer.Process(inputPath, outputPath, progressCh); err != nil {
+			if err := fixer.Process(inputPath, outputPath, progressCh, useSymlinks); err != nil {
 				fyne.Do(func() {
 					progressLabel.SetText("Error: " + err.Error())
 				})
@@ -96,6 +103,7 @@ func Main() {
 	w.SetContent(container.NewVBox(
 		inputButton,
 		outputButton,
+		UseLinksCheckbox,
 		startButton,
 		progressBar,
 		progressLabel,

@@ -20,10 +20,12 @@ type Progress struct {
 // -> DiscoverDirs
 // --> ProcessDirectory
 // ---> ProcessFile
+// TODO: Do something in case files already exists instead of overwriting them
 func Process(
 	sourcePath string,
 	outputPath string,
 	progressCh chan<- Progress,
+	useSymlinks bool,
 ) error {
 	defer close(progressCh)
 	p := Progress{}
@@ -41,7 +43,7 @@ func Process(
 		fmt.Println("error discovering: ", err)
 	}
 
-	err = ProcessFile(sourcePath, outputPath)
+	err = ProcessFile(sourcePath, outputPath, sourcePath, outputPath, useSymlinks)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -52,10 +54,7 @@ func Process(
 
 		var targetPath string = filepath.Join(outputPath, dir.Name())
 
-		err := ProcessDirectory(dirPath, targetPath, &p, progressCh)
-		if err != nil {
-			fmt.Println("Error processing directory:", dirPath, err)
-		}
+		p = ProcessDirectory(dirPath, targetPath, sourcePath, outputPath, useSymlinks, p, progressCh)
 	}
 
 	return nil
@@ -65,15 +64,19 @@ func Process(
 func ProcessDirectory(
 	dirPath string,
 	outputPath string,
-	p *Progress,
+	sourcePath string,
+	rootOutputPath string,
+	useSymlinks bool,
+	p Progress,
 	progressCh chan<- Progress,
-) error {
+) Progress {
 	files, err := os.ReadDir(dirPath)
 	if err != nil {
-		return err
+		return p
 	}
 
 	// Job pools
+	// TODO: Fix potential race conditions
 	jobs := make(chan string)
 	completed := make(chan string)
 
@@ -85,7 +88,7 @@ func ProcessDirectory(
 	for i := 0; i < workerCount; i++ {
 		go func() {
 			for imagePath := range jobs {
-				ProcessFile(imagePath, outputPath)
+				ProcessFile(imagePath, outputPath, sourcePath, rootOutputPath, useSymlinks)
 				// signal completion for one job
 				completed <- imagePath
 				wg.Done()
@@ -125,14 +128,20 @@ func ProcessDirectory(
 	for ev := range completed {
 		p.Processed++
 		p.Current = ev
-		progressCh <- *p
+		progressCh <- p
 	}
 
-	return nil
+	return p
 }
 
 // ProcessFile processes a single file by finding its sidecar file and then fixing it using the sidecar's metadata
-func ProcessFile(sourcePath string, outputPath string) error {
+func ProcessFile(
+	sourcePath string,
+	outputPath string,
+	rootSourcePath string,
+	rootOutputPath string,
+	useSymlinks bool,
+) error {
 	sidecarPath := FindSidecar(sourcePath)
 
 	// Metadata sidecar file not found
@@ -145,13 +154,18 @@ func ProcessFile(sourcePath string, outputPath string) error {
 		fmt.Println("error reading metadata: ", err)
 	}
 
-	CreateFixedFile(sourcePath, sidecarPath, outputPath)
+	CreateFixedFile(sourcePath, sidecarPath, outputPath, rootOutputPath, useSymlinks)
 
 	return nil
 }
 
-// Create a fixed file with fixed metadata
-func CreateFixedFile(filePath string, fileMetadataPath string, outputPath string) error {
+func CreateFixedFile(
+	filePath string,
+	fileMetadataPath string,
+	outputPath string,
+	rootOutputPath string,
+	useSymlinks bool,
+) error {
 	// Ensure output directory exists
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
 		return err
@@ -159,6 +173,37 @@ func CreateFixedFile(filePath string, fileMetadataPath string, outputPath string
 
 	fileName := filepath.Base(filePath)
 	destPath := filepath.Join(outputPath, fileName)
+
+	isYearFolder, _ := CheckWhetherYear(filepath.Base(outputPath))
+
+	if useSymlinks && !isYearFolder {
+		// Attempt to find the file inside of any year folder in the output
+		// TODO: Make this more efficient, whole output directory is being searched every time
+		entries, _ := os.ReadDir(rootOutputPath)
+		for _, curEntry := range entries {
+			if !curEntry.IsDir() {
+				continue
+			}
+
+			isYear, _ := CheckWhetherYear(curEntry.Name())
+			if !isYear {
+				continue
+			}
+
+			target := filepath.Join(rootOutputPath, curEntry.Name(), fileName)
+			if _, err := os.Stat(target); err == nil {
+				if err := os.Symlink(target, destPath); err != nil {
+					// Symlink failed, continue with normal copy
+					if !os.IsExist(err) {
+						return fmt.Errorf("failed to create symlink: %w", err)
+					}
+				} else {
+					// Symlink successful
+					return nil
+				}
+			}
+		}
+	}
 
 	if err := DuplicateFile(filePath, destPath); err != nil {
 		return err

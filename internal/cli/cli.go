@@ -9,6 +9,8 @@ import (
 	"github.com/feloex/GoogleTakeoutFixer/internal/fixer"
 )
 
+// TODO: Add symlink flag to decide whether to use symlinks for albums
+
 func Main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Flags missing! Enter InputPath and OutputPath.")
@@ -21,7 +23,7 @@ func Main() {
 	progressCh := make(chan fixer.Progress)
 
 	go func() {
-		if err := fixer.Process(inputPath, outputPath, progressCh); err != nil {
+		if err := fixer.Process(inputPath, outputPath, progressCh, false); err != nil {
 			fmt.Println("error:", err)
 		}
 	}()
