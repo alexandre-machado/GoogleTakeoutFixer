@@ -233,14 +233,25 @@ func CreateFixedFile(
 
 // Checks whether a directory is a standart google year folder
 func IsYearFolder(dirPath string) (bool, error) {
-	// TODO: Add support for non english takeouts
-	re := regexp.MustCompile(`^Photos from \d+$`)
-
-	if re.MatchString(dirPath) {
-		return true, nil
-	} else {
-		return false, nil
+	// Year folder prefixes of some countries
+	yearPrefixes := []string{
+		"Photos from ", // English
+		"Fotos von ",   // German
+		"Photos de ",   // French
+		"Foto del ",    // Italian
+		"Fotos de ",    // Spanish / Portuguese
 	}
+
+	for _, prefix := range yearPrefixes {
+		if strings.HasPrefix(dirPath, prefix) {
+			// The rest of the string has to be 4 characters long
+			yearPart := strings.TrimPrefix(dirPath, prefix)
+			if matched, _ := regexp.MatchString(`^\d{4}$`, yearPart); matched {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // Checks whether a file, that is provided using its path, is a media file
