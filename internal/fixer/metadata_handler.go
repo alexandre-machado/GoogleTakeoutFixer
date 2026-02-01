@@ -7,6 +7,8 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -41,6 +43,23 @@ func ReadJsonMetadata(jsonPath string) (imageMetadata, error) {
 	}
 
 	return data, json.Unmarshal(byteValue, &data)
+}
+
+// Helper to find exiftool (bundled or in PATH)
+func getExifToolPath() string {
+	exePath, err := os.Executable()
+	if err == nil {
+		dir := filepath.Dir(exePath)
+		exifName := "exiftool"
+		if runtime.GOOS == "windows" {
+			exifName = "exiftool.exe"
+		}
+		bundledPath := filepath.Join(dir, exifName)
+		if _, err := os.Stat(bundledPath); err == nil {
+			return bundledPath
+		}
+	}
+	return "exiftool"
 }
 
 // Apply all available metadata to a file
@@ -100,7 +119,7 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 
 	// Run exiftool using the collected args
 	// TODO: Starting a new exiftool instance every time is not necessary, reuse instances
-	cmd := exec.Command("exiftool", args...)
+	cmd := exec.Command(getExifToolPath(), args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("exiftool error: %v, %s", err, out)
 	}
