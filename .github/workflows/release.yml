@@ -50,15 +50,6 @@ jobs:
           cp "${EXIF_DIR}/exiftool" bundle/
           cp -r "${EXIF_DIR}/lib" bundle/
           
-          # Create .desktop file for easier execution via UI
-          echo "[Desktop Entry]" > bundle/${APP_NAME}.desktop
-          echo "Type=Application" >> bundle/${APP_NAME}.desktop
-          echo "Name=${APP_NAME}" >> bundle/${APP_NAME}.desktop
-          echo "Exec=./run.sh" >> bundle/${APP_NAME}.desktop
-          echo "Icon=utilities-terminal" >> bundle/${APP_NAME}.desktop
-          echo "Terminal=false" >> bundle/${APP_NAME}.desktop
-          echo "Categories=Utility;" >> bundle/${APP_NAME}.desktop
-          
           # Create simple run script (Robuster gegen Pfad-Probleme)
           echo '#!/bin/bash' > bundle/run.sh
           echo 'cd "$(dirname "$0")"' >> bundle/run.sh
@@ -66,7 +57,7 @@ jobs:
           echo './'"${APP_NAME}" >> bundle/run.sh
           
           # Set permissions
-          chmod +x bundle/exiftool bundle/${APP_NAME} bundle/run.sh bundle/${APP_NAME}.desktop
+          chmod +x bundle/exiftool bundle/${APP_NAME} bundle/run.sh
 
           (cd bundle && tar -czf "../${APP_NAME}_Linux_x64.tar.gz" .)
 
@@ -261,17 +252,22 @@ jobs:
       - name: Download all assets
         uses: actions/download-artifact@v4
         with:
-          path: release-assets
+          pattern: asset-*
+          path: .
           merge-multiple: true
 
       - name: List assets
         shell: bash
-        run: ls -la release-assets
+        run: ls -la .
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: release-assets/*
+          files: |
+            ${{ env.APP_NAME }}_Linux_x64.tar.gz
+            ${{ env.APP_NAME }}_Windows_x64.zip
+            ${{ env.APP_NAME }}_macOS_universal.tar.gz
+          fail_on_unmatched_files: true
           draft: true
           prerelease: false
