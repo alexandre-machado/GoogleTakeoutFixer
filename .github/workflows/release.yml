@@ -26,6 +26,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Install System Dependencies
         run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
@@ -35,9 +36,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist bundle
+          
+          # Build binary
           CGO_ENABLED=1 go build -ldflags "-s -w" -o dist/${APP_NAME} ./cmd/main.go
           mv dist/${APP_NAME} bundle/
 
+          # Download ExifTool
           ET_VER="$(curl -s https://exiftool.org/ver.txt)"
           echo "Detected ExifTool version: ${ET_VER}"
           curl -f -L -A "GitHubAction" -o exiftool.archive "https://exiftool.org/Image-ExifTool-${ET_VER}.tar.gz"
@@ -45,7 +49,24 @@ jobs:
           EXIF_DIR="$(find . -maxdepth 1 -type d -name "Image-ExifTool*" -print -quit)"
           cp "${EXIF_DIR}/exiftool" bundle/
           cp -r "${EXIF_DIR}/lib" bundle/
-          chmod +x bundle/exiftool bundle/${APP_NAME}
+          
+          # Create .desktop file for easier execution via UI
+          echo "[Desktop Entry]" > bundle/${APP_NAME}.desktop
+          echo "Type=Application" >> bundle/${APP_NAME}.desktop
+          echo "Name=${APP_NAME}" >> bundle/${APP_NAME}.desktop
+          echo "Exec=./run.sh" >> bundle/${APP_NAME}.desktop
+          echo "Icon=utilities-terminal" >> bundle/${APP_NAME}.desktop
+          echo "Terminal=false" >> bundle/${APP_NAME}.desktop
+          echo "Categories=Utility;" >> bundle/${APP_NAME}.desktop
+          
+          # Create simple run script (Robuster gegen Pfad-Probleme)
+          echo '#!/bin/bash' > bundle/run.sh
+          echo 'cd "$(dirname "$0")"' >> bundle/run.sh
+          echo 'chmod +x ./'"${APP_NAME}" >> bundle/run.sh
+          echo './'"${APP_NAME}" >> bundle/run.sh
+          
+          # Set permissions
+          chmod +x bundle/exiftool bundle/${APP_NAME} bundle/run.sh bundle/${APP_NAME}.desktop
 
           (cd bundle && tar -czf "../${APP_NAME}_Linux_x64.tar.gz" .)
 
@@ -58,7 +79,7 @@ jobs:
 
   build-windows:
     name: Build asset (Windows x64)
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -66,42 +87,45 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
-      - name: Set up MSYS2 (Windows)
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          path-type: inherit
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-pkg-config
+      - name: Install MinGW-w64 (Cross-Compiler)
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64 zip
 
       - name: Build + bundle ExifTool + archive
-        shell: msys2 {0}
+        shell: bash
         env:
           CGO_ENABLED: "1"
+          GOOS: windows
+          GOARCH: amd64
+          # Use the MinGW compiler for CGO
+          CC: x86_64-w64-mingw32-gcc
         run: |
           set -euo pipefail
           mkdir -p dist bundle
-          go build -ldflags "-s -w" -o dist/${APP_NAME}.exe ./cmd/main.go
+          
+          # Windows-GUI build (hides console, fixes some initialization issues)
+          go build -ldflags "-s -w -H=windowsgui" -o dist/${APP_NAME}.exe ./cmd/main.go
           mv dist/${APP_NAME}.exe bundle/
 
+          # Download ExifTool (Windows Version)
           ET_VER="$(curl -s https://exiftool.org/ver.txt)"
           echo "Detected ExifTool version: ${ET_VER}"
-          curl -f -L -A "GitHubAction" -o exiftool.archive "https://exiftool.org/exiftool-${ET_VER}_64.zip"
-          unzip -q exiftool.archive
+          curl -f -L -A "GitHubAction" -o exiftool.zip "https://exiftool.org/exiftool-${ET_VER}_64.zip"
+          unzip -q exiftool.zip
 
+          # Locate and move exiftool
           EXE_PATH="$(find . -maxdepth 3 -type f -name 'exiftool(-k).exe' -print -quit)"
           [[ -n "${EXE_PATH}" ]] || (echo "Could not find exiftool(-k).exe after unzip" >&2 && exit 1)
           mv "${EXE_PATH}" bundle/exiftool.exe
 
+          # Copy extra files if they exist
           FILES_DIR="$(find . -maxdepth 3 -type d -name 'exiftool_files' -print -quit)"
           if [[ -n "${FILES_DIR}" ]]; then
             cp -r "${FILES_DIR}" bundle/
           fi
 
-          (cd bundle && 7z a "../${APP_NAME}_Windows_x64.zip" .)
+          (cd bundle && zip -r "../${APP_NAME}_Windows_x64.zip" .)
 
       - name: Upload Artifact (Windows)
         uses: actions/upload-artifact@v4
@@ -120,6 +144,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Install dependencies (macOS)
         run: |
@@ -156,6 +181,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Install dependencies (macOS)
         run: |
