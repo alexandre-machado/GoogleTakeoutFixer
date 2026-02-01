@@ -72,15 +72,15 @@ jobs:
         with:
           msystem: MINGW64
           update: true
+          path-type: inherit
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-pkg-config
 
       - name: Build + bundle ExifTool + archive
-        shell: bash
+        shell: msys2 {0}
         env:
           CGO_ENABLED: "1"
-          PATH: C:\\msys64\\mingw64\\bin;${{ env.PATH }}
         run: |
           set -euo pipefail
           mkdir -p dist bundle
@@ -112,7 +112,7 @@ jobs:
 
   build-macos-amd64:
     name: Build binary (macOS amd64 artifact)
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -132,6 +132,8 @@ jobs:
           GOOS: darwin
           GOARCH: amd64
           CGO_ENABLED: "1"
+          CGO_CFLAGS: "-arch x86_64"
+          CGO_LDFLAGS: "-arch x86_64"
         run: |
           set -euo pipefail
           mkdir -p dist
