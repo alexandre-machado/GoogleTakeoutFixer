@@ -80,13 +80,19 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      # windows-latest includes GCC (MinGW), Go, and 7zip by default in the standard environment
-      # Using 'shell: bash' uses Git Bash which inherits the correct PATH
-
-      # At least i hope so
+      - name: Set up MSYS2 (MinGW-w64 GCC)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            zip
+            unzip
+            findutils
 
       - name: Build + bundle ExifTool + archive
-        shell: bash
+        shell: msys2 {0}
         env:
           CGO_ENABLED: "1"
           GOOS: windows
@@ -103,9 +109,7 @@ jobs:
           ET_VER="$(curl -s https://exiftool.org/ver.txt)"
           echo "Detected ExifTool version: ${ET_VER}"
           curl -f -L -A "GitHubAction" -o exiftool.zip "https://exiftool.org/exiftool-${ET_VER}_64.zip"
-          
-          # Use 7z (installed on runners) to extract
-          7z x exiftool.zip -y
+          unzip -q exiftool.zip
 
           # Locate and move exiftool
           EXE_PATH="$(find . -maxdepth 3 -type f -name 'exiftool(-k).exe' -print -quit)"
@@ -118,8 +122,7 @@ jobs:
             cp -r "${FILES_DIR}" bundle/
           fi
 
-          # Use 7z to create the final zip archive (faster and reliable)
-          (cd bundle && 7z a -tzip "../${APP_NAME}_Windows_x64.zip" .)
+          (cd bundle && zip -r "../${APP_NAME}_Windows_x64.zip" .)
 
       - name: Upload Artifact (Windows)
         uses: actions/upload-artifact@v4
