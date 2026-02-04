@@ -8,12 +8,6 @@ import (
 	"strings"
 )
 
-var sidecarSuffixes = []string{
-	".supplemental-m.json",
-	".supplemental-metadata.json",
-	".supplemental-metada.json",
-}
-
 // Duplicate a file from one path to another
 func DuplicateFile(inputPath string, outputPath string) error {
 	sourceFile, err := os.Open(inputPath)
@@ -53,13 +47,16 @@ func DiscoverDirs(path string) ([]os.DirEntry, error) {
 
 // Find a matching sidecar JSON
 func FindSidecar(imagePath string) string {
-	for _, suffix := range sidecarSuffixes {
-		p := imagePath + suffix
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
+	// Example: photoname.jpg.supplemental-metadata.json
+	pattern := imagePath + ".supplemental-*.json"
+
+	matches, err := filepath.Glob(pattern)
+	if err == nil && len(matches) > 0 {
+		return matches[0]
 	}
+
 	fmt.Printf("No sidecar file found for %s\n", imagePath)
+	// TODO: return error instead of empty string
 	return ""
 }
 
