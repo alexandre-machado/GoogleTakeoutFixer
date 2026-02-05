@@ -1,6 +1,7 @@
 package fixer
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,8 +11,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 )
+
+// TODO: Error, warning handling/logging troughout the whole fixer package is not consistent and should be improved
 
 // Struct to hold the structure of the JSON metadata
 type imageMetadata struct {
@@ -60,6 +65,49 @@ func getExifToolPath() string {
 		}
 	}
 	return "exiftool"
+}
+
+// Start a persistent exiftool process
+func InitializeExifTool() error {
+	exifToolMutex.Lock()
+	defer exifToolMutex.Unlock()
+
+	if exifToolCmd != nil {
+		// Already initialized
+		return nil
+	}
+
+	exifToolCmd = exec.Command(getExifToolPath(), "-stay_open", "True", "-@", "-")
+
+	var err error = nil
+	exifToolStdin, err = exifToolCmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+
+	exifToolStdout, err = exifToolCmd.StdoutPipe()
+
+	if err != nil {
+		return err
+	}
+
+	if err := exifToolCmd.Start(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Close the persistent exiftool process
+func CloseExifTool() {
+	exifToolMutex.Lock()
+	defer exifToolMutex.Unlock()
+
+	if exifToolCmd != nil {
+		exifToolStdin.Write([]byte("-stay_open\nFalse\n"))
+		exifToolCmd.Wait()
+		exifToolCmd = nil
+	}
 }
 
 // Apply all available metadata to a file
@@ -117,12 +165,41 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 
 	args = append(args, filePath)
 
-	// Run exiftool using the collected args
-	// TODO: Starting a new exiftool instance every time is not necessary, reuse instances
-	cmd := exec.Command(getExifToolPath(), args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("exiftool error: %v, %s", err, out)
+	// Use the persistent exiftool instance
+	exifToolMutex.Lock()
+	defer exifToolMutex.Unlock()
+
+	if exifToolCmd == nil {
+		return fmt.Errorf("exiftool is not initialized")
+	}
+
+	command := strings.Join(args, "\n") + "\n-execute\n"
+	if _, err := exifToolStdin.Write([]byte(command)); err != nil {
+		return fmt.Errorf("failed to write to exiftool: %v", err)
+	}
+
+	scanner := bufio.NewScanner(exifToolStdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "Error") {
+			return fmt.Errorf("exiftool error: %s", line)
+		}
+		if line == "{ready}" {
+			break
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("failed to read from exiftool: %v", err)
 	}
 
 	return nil
 }
+
+// Exiftool process variables
+var (
+	exifToolCmd    *exec.Cmd
+	exifToolStdin  io.WriteCloser
+	exifToolStdout io.ReadCloser
+	exifToolMutex  sync.Mutex
+)
