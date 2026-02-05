@@ -40,6 +40,7 @@ func Process(
 	outputPath string,
 	progressCh chan<- Progress,
 	useSymlinks bool,
+	writeMetadata bool,
 ) error {
 	defer close(progressCh)
 	p := Progress{}
@@ -57,7 +58,7 @@ func Process(
 		fmt.Println("error discovering: ", err)
 	}
 
-	err = ProcessFile(sourcePath, outputPath, sourcePath, outputPath, useSymlinks)
+	err = ProcessFile(sourcePath, outputPath, sourcePath, outputPath, useSymlinks, writeMetadata)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -68,7 +69,7 @@ func Process(
 
 		var targetPath string = filepath.Join(outputPath, dir.Name())
 
-		p = ProcessDirectory(dirPath, targetPath, sourcePath, outputPath, useSymlinks, p, progressCh)
+		p = ProcessDirectory(dirPath, targetPath, sourcePath, outputPath, useSymlinks, writeMetadata, p, progressCh)
 	}
 
 	return nil
@@ -81,6 +82,7 @@ func ProcessDirectory(
 	sourcePath string,
 	rootOutputPath string,
 	useSymlinks bool,
+	writeMetadata bool,
 	p Progress,
 	progressCh chan<- Progress,
 ) Progress {
@@ -105,7 +107,7 @@ func ProcessDirectory(
 	for i := 0; i < workerCount; i++ {
 		go func() {
 			for imagePath := range jobs {
-				err := ProcessFile(imagePath, outputPath, sourcePath, rootOutputPath, useSymlinks)
+				err := ProcessFile(imagePath, outputPath, sourcePath, rootOutputPath, useSymlinks, writeMetadata)
 				if err != nil {
 					errors <- fmt.Errorf("error processing file %s: %w", imagePath, err)
 				} else {
@@ -177,6 +179,7 @@ func ProcessFile(
 	rootSourcePath string,
 	rootOutputPath string,
 	useSymlinks bool,
+	writeMetadata bool,
 ) error {
 	sidecarPath := FindSidecar(sourcePath)
 
@@ -185,12 +188,14 @@ func ProcessFile(
 		return nil
 	}
 
-	_, err := ReadJsonMetadata(sidecarPath)
-	if err != nil {
-		fmt.Println("error reading metadata: ", err)
+	if writeMetadata {
+		_, err := ReadJsonMetadata(sidecarPath)
+		if err != nil {
+			fmt.Println("error reading metadata: ", err)
+		}
 	}
 
-	CreateFixedFile(sourcePath, sidecarPath, outputPath, rootOutputPath, useSymlinks)
+	CreateFixedFile(sourcePath, sidecarPath, outputPath, rootOutputPath, useSymlinks, writeMetadata)
 
 	return nil
 }
@@ -201,6 +206,7 @@ func CreateFixedFile(
 	outputPath string,
 	rootOutputPath string,
 	useSymlinks bool,
+	writeMetadata bool,
 ) error {
 	// Ensure output directory exists
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
@@ -245,12 +251,14 @@ func CreateFixedFile(
 		return err
 	}
 
-	metadata, err := ReadJsonMetadata(fileMetadataPath)
-	if err != nil {
-		return err
-	}
+	if writeMetadata {
+		metadata, err := ReadJsonMetadata(fileMetadataPath)
+		if err != nil {
+			return err
+		}
 
-	ApplyMetadata(destPath, metadata)
+		ApplyMetadata(destPath, metadata)
+	}
 
 	return nil
 }

@@ -17,6 +17,8 @@ func Main() {
 
 	useSymlinks := flag.Bool("symlink", false, "Use symlinks inside of albums instead of duplicating images")
 
+	skipExif := flag.Bool("skip-exif", false, "Skip writing EXIF metadata to files")
+
 	flag.Parse()
 
 	if *inputPath == "" || *outputPath == "" {
@@ -27,8 +29,8 @@ func Main() {
 
 	progressCh := make(chan fixer.Progress)
 
-	go func() {
-		if err := fixer.Process(*inputPath, *outputPath, progressCh, *useSymlinks); err != nil {
+	go func() { // Invert skipExif because the flag is named skipExif but the process function expects writeMetadata
+		if err := fixer.Process(*inputPath, *outputPath, progressCh, *useSymlinks, !*skipExif); err != nil {
 			fmt.Printf("Error during processing: %v\n", err)
 		}
 	}()

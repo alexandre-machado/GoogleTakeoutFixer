@@ -21,6 +21,7 @@ func Main() {
 	w := a.NewWindow("GoogleTakeoutFixer")
 
 	var useSymlinks bool = false
+	var writeExif bool = false
 
 	progressLabel := widget.NewLabel("")
 	progressBar := widget.NewProgressBar()
@@ -42,9 +43,15 @@ func Main() {
 		}
 	})
 
+	// Checkboxes for options. Default value is false
 	UseLinksCheckbox := widget.NewCheck("Use symlinks for albums", func(value bool) {
 		useSymlinks = value
 		fmt.Println("use symlinks", useSymlinks)
+	})
+
+	WriteExifCheckbox := widget.NewCheck("Write EXIF metadata", func(value bool) {
+		writeExif = value
+		fmt.Println("write exif", writeExif)
 	})
 
 	// Button to start processing
@@ -66,7 +73,7 @@ func Main() {
 		progressCh := make(chan fixer.Progress)
 
 		go func() {
-			if err := fixer.Process(inputPath, outputPath, progressCh, useSymlinks); err != nil {
+			if err := fixer.Process(inputPath, outputPath, progressCh, useSymlinks, writeExif); err != nil {
 				fyne.Do(func() {
 					progressLabel.SetText("Error: " + err.Error())
 				})
@@ -104,6 +111,7 @@ func Main() {
 		inputButton,
 		outputButton,
 		UseLinksCheckbox,
+		WriteExifCheckbox,
 		startButton,
 		progressBar,
 		progressLabel,
