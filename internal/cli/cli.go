@@ -11,12 +11,15 @@ import (
 )
 
 func Main() {
+	// Handle logs from the fixer package by printing them
+	fixer.LogHandler = func(level fixer.LogLevel, message string) {
+		fmt.Printf("[%s] %s\n", level, message)
+	}
+
+	// Command-line flags
 	inputPath := flag.String("input", "", "Path to Google takeout directory")
-
 	outputPath := flag.String("output", "", "Path to output directory")
-
 	useSymlinks := flag.Bool("symlink", false, "Use symlinks inside of albums instead of duplicating images")
-
 	skipExif := flag.Bool("skip-exif", false, "Skip writing EXIF metadata to files")
 
 	flag.Parse()

@@ -86,7 +86,6 @@ func InitializeExifTool() error {
 	}
 
 	exifToolStdout, err = exifToolCmd.StdoutPipe()
-
 	if err != nil {
 		return err
 	}
@@ -170,19 +169,19 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 	defer exifToolMutex.Unlock()
 
 	if exifToolCmd == nil {
-		return fmt.Errorf("exiftool is not initialized")
+		return fmt.Errorf("Exiftool is not initialized")
 	}
 
 	command := strings.Join(args, "\n") + "\n-execute\n"
 	if _, err := exifToolStdin.Write([]byte(command)); err != nil {
-		return fmt.Errorf("failed to write to exiftool: %v", err)
+		return fmt.Errorf("Failed to write to exiftool: %v", err)
 	}
 
 	scanner := bufio.NewScanner(exifToolStdout)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "Error") {
-			return fmt.Errorf("exiftool error: %s", line)
+			return fmt.Errorf("Exiftool error: %s", line)
 		}
 		if line == "{ready}" {
 			break
@@ -190,7 +189,7 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("failed to read from exiftool: %v", err)
+		return fmt.Errorf("Failed to read from exiftool: %v", err)
 	}
 
 	return nil

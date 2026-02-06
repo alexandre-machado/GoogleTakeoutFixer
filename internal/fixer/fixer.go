@@ -42,12 +42,21 @@ func Process(
 	useSymlinks bool,
 	writeMetadata bool,
 ) error {
+	Log(LoggerInfo, "Starting processing with source: %s and output: %s", sourcePath, outputPath)
 	defer close(progressCh)
 	p := Progress{}
 
+	if writeMetadata {
+		if err := InitializeExifTool(); err != nil {
+			Log(LoggerError, "Failed to initialize exiftool: %v", err)
+			return err
+		}
+		defer CloseExifTool()
+	}
+
 	amountImages, err := CountImagesRecursive(sourcePath)
 	if err != nil {
-		fmt.Println("Error counting images:", err)
+		Log(LoggerError, "Error counting images: %v", err)
 		return err
 	}
 	p.Total = amountImages
@@ -55,12 +64,12 @@ func Process(
 
 	dirs, err := DiscoverDirs(sourcePath)
 	if err != nil {
-		fmt.Println("error discovering: ", err)
+		Log(LoggerError, "Error discovering directories: %v", err)
 	}
 
 	err = ProcessFile(sourcePath, outputPath, sourcePath, outputPath, useSymlinks, writeMetadata)
 	if err != nil {
-		fmt.Println(err)
+		Log(LoggerError, "Error processing file: %v", err)
 	}
 
 	for _, dir := range dirs {
@@ -88,7 +97,7 @@ func ProcessDirectory(
 ) Progress {
 	files, err := os.ReadDir(dirPath)
 	if err != nil {
-		fmt.Printf("Error reading directory %s: %v\n", dirPath, err)
+		Log(LoggerError, "Error reading directory: %v", err)
 		return p
 	}
 
@@ -160,7 +169,7 @@ func ProcessDirectory(
 			if !ok {
 				errors = nil
 			} else {
-				fmt.Printf("Error: %v\n", err)
+				Log(LoggerError, "%v", err)
 			}
 		}
 
@@ -181,21 +190,31 @@ func ProcessFile(
 	useSymlinks bool,
 	writeMetadata bool,
 ) error {
-	sidecarPath := FindSidecar(sourcePath)
+	sidecarPath, err := FindSidecar(sourcePath)
+
+	if err != nil {
+		Log(LoggerError, "Error finding sidecar for file %s: %v", sourcePath, err)
+		return err
+	}
 
 	// Metadata sidecar file not found
 	if sidecarPath == "" {
+		Log(LoggerWarn, "No sidecar file found for %s", sourcePath)
 		return nil
 	}
 
 	if writeMetadata {
 		_, err := ReadJsonMetadata(sidecarPath)
 		if err != nil {
-			fmt.Println("error reading metadata: ", err)
+			Log(LoggerError, "Error reading metadata for file %s: %v", sourcePath, err)
 		}
 	}
 
-	CreateFixedFile(sourcePath, sidecarPath, outputPath, rootOutputPath, useSymlinks, writeMetadata)
+	err = CreateFixedFile(sourcePath, sidecarPath, outputPath, rootOutputPath, useSymlinks, writeMetadata)
+	if err != nil {
+		Log(LoggerError, "Error creating fixed file for %s: %v", sourcePath, err)
+		return err
+	}
 
 	return nil
 }
@@ -237,7 +256,7 @@ func CreateFixedFile(
 				if err := os.Symlink(target, destPath); err != nil {
 					// Symlink failed, continue with normal copy
 					if !os.IsExist(err) {
-						return fmt.Errorf("failed to create symlink: %w", err)
+						return fmt.Errorf("Failed to create symlink: %w", err)
 					}
 				} else {
 					// Symlink successful
@@ -254,10 +273,13 @@ func CreateFixedFile(
 	if writeMetadata {
 		metadata, err := ReadJsonMetadata(fileMetadataPath)
 		if err != nil {
-			return err
+			Log(LoggerError, "%s", err.Error())
 		}
 
-		ApplyMetadata(destPath, metadata)
+		err = ApplyMetadata(destPath, metadata)
+		if err != nil {
+			Log(LoggerError, "%s", err.Error())
+		}
 	}
 
 	return nil

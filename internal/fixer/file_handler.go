@@ -1,7 +1,6 @@
 package fixer
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -46,18 +45,16 @@ func DiscoverDirs(path string) ([]os.DirEntry, error) {
 }
 
 // Find a matching sidecar JSON
-func FindSidecar(imagePath string) string {
+func FindSidecar(imagePath string) (string, error) {
 	// Example: photoname.jpg.supplemental-metadata.json
 	pattern := imagePath + ".supplemental-*.json"
 
 	matches, err := filepath.Glob(pattern)
 	if err == nil && len(matches) > 0 {
-		return matches[0]
+		return matches[0], nil
 	}
 
-	fmt.Printf("No sidecar file found for %s\n", imagePath)
-	// TODO: return error instead of empty string
-	return ""
+	return "", nil
 }
 
 // Checks if the file at the given path has the specified extension
