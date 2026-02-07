@@ -35,6 +35,10 @@ GoogleTakeoutFixer solves these issues by:
 
 Once the process is complete, you can find your fixed photos in the output folder you selected.
 
+## Planned Features
+- Support for more languages
+- Cancel button during processing in the GUI
+
 ## Credits
 This project modifies metadata using the [ExifTool](https://exiftool.org/) library by **Phil Harvey**. ExifTool is licensed under the Perl Artistic license, or the GNU General Public License (see [here](https://exiftool.org/#license) for more details).
 
