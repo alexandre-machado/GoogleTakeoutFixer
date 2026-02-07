@@ -19,29 +19,37 @@ func Main() {
 	a := app.New()
 	a.SetIcon(resourceGoogleTakeoutFixerPng)
 	w := a.NewWindow("GoogleTakeoutFixer")
+	w.Resize(fyne.NewSize(550, 400))
 
 	var useSymlinks bool = false
 	var writeExif bool = false
 
 	progressLabel := widget.NewLabel("")
+	progressLabel.Truncation = fyne.TextTruncateEllipsis
 	progressBar := widget.NewProgressBar()
 
 	// Button for opening file dialog for choosing google takeout path and output path
-	inputButton := widget.NewButton("Select Google Takeout Folder", func() {
+	var inputButton *widget.Button
+	inputButton = widget.NewButton("Select Google Takeout Folder", func() {
 		dir, err := zenity.SelectFile(zenity.Title("Select Google Takeout Folder"), zenity.Directory())
 		if err == nil {
 			inputPath = dir
+			inputButton.SetText("Input: " + filepath.Base(inputPath))
 			fmt.Println("Input folder:", inputPath)
 		}
 	})
+	//inputButton.Resize(fyne.NewSize(200, inputButton.MinSize().Height))
 
-	outputButton := widget.NewButton("Select Output Folder", func() {
+	var outputButton *widget.Button
+	outputButton = widget.NewButton("Select Output Folder", func() {
 		dir, err := zenity.SelectFile(zenity.Title("Select Output Folder"), zenity.Directory())
 		if err == nil {
 			outputPath = dir
+			outputButton.SetText("Output: " + filepath.Base(outputPath))
 			fmt.Println("Output folder:", outputPath)
 		}
 	})
+	//outputButton.Resize(fyne.NewSize(200, outputButton.MinSize().Height))
 
 	// Checkboxes for options. Default value is false
 	UseLinksCheckbox := widget.NewCheck("Use symlinks for albums", func(value bool) {
@@ -107,14 +115,58 @@ func Main() {
 		}()
 	})
 
-	w.SetContent(container.NewVBox(
+	logEntry := widget.NewMultiLineEntry()
+	logEntry.Disable()
+
+	fixer.LogHandler = func(level fixer.LogLevel, message string) {
+		logMsg := fmt.Sprintf("[%s] %s\n", level, message)
+		fyne.Do(func() {
+			logEntry.SetText(logEntry.Text + logMsg)
+			logEntry.Refresh()
+		})
+	}
+
+	fixer.LogHandler = func(level fixer.LogLevel, message string) {
+		logMsg := fmt.Sprintf("[%s] %s\n", level, message)
+		fyne.Do(func() {
+			logEntry.SetText(logEntry.Text + logMsg)
+			logEntry.Refresh()
+		})
+	}
+
+	logEntry.SetText(logEntry.Text + "Logs will appear here...\n")
+
+	FolderButtons := container.NewGridWithColumns(
+		2,
 		inputButton,
 		outputButton,
+	)
+
+	CheckBoxes := container.NewVBox(
 		UseLinksCheckbox,
 		WriteExifCheckbox,
+	)
+
+	SecondRow := container.NewGridWithColumns(
+		2,
+		CheckBoxes,
 		startButton,
-		progressBar,
+	)
+
+	topContent := container.NewVBox(
+		FolderButtons,
+		SecondRow,
+
 		progressLabel,
+		progressBar,
+	)
+
+	w.SetContent(container.NewBorder(
+		topContent,
+		nil,
+		nil,
+		nil,
+		logEntry, // expand
 	))
 
 	w.ShowAndRun()
