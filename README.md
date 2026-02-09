@@ -35,12 +35,15 @@ To use GoogleTakeoutFixer, you must have downloaded your photos from Google Take
 
     <img src="images/TakeoutPhotosSelect.png" alt="Google Takeout Selected" width="400"/>
 3. Scroll down to the bottom and click "Next Step".
-4. In the "Transfer to" section, choose how you'd like to recieve your download link, i recommend choosing email. For "File size", select 50 GB for easier handling.
+
+4. In the "Transfer to" section, choose how you'd like to receive your download link. I recommend choosing email. For "File size", select 50 GB for easier handling.
 
     <img src="images/CreateExportTakeout.png" alt="Create Export options" width=300>
 5. Click "Create export" and follow the instructions.
 
-**Note:** All your files need to be inside of a single folder for GoogleTakeoutFixer to work. If you have multiple folders, you can simply move all the files into one folder.
+> [!NOTE]
+> - If your Google Takeout exceeds the 50 GB limit and is split into multiple archives, extract all the archives and move the extracted files into a single folder. This ensures that GoogleTakeoutFixer can process all your files correctly.
+> - Select the folder named "Google Photos" as your input folder. This folder should contain subfolders like "Photos from (year)" and folders with the names of your albums. Do not select a parent folder of "Google Photos".
 
 ### 2. Installation
 1. Download the latest release of GoogleTakeoutFixer from the [release page](https://github.com/feloex/GoogleTakeoutFixer/releases). Choose the version that matches your operating system.
