@@ -65,6 +65,9 @@ Once the process is complete, you can find your fixed files in the output folder
 - Cancel button during processing in the GUI
 - Better looking and more user-friendly GUI
 - More options for how to organize / structure the output folder
+- A simple website for users who are not familiar with Github
+- Pull request and issue template
+- Warning if the selected input folder does not contain the expected "Google Photos" folder structure (meaning the user selected the wrong folder)
 
 ## Credits
 This project modifies metadata using the [ExifTool](https://exiftool.org/) library by **Phil Harvey**. ExifTool is licensed under the Perl Artistic license, or the GNU General Public License (see [here](https://exiftool.org/#license) for more details).
