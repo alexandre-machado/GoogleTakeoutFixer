@@ -28,7 +28,7 @@ GoogleTakeoutFixer solves these issues by:
 ### 1. Preparation
 To use GoogleTakeoutFixer, you must have downloaded your photos from Google Takeout and extracted them. Follow these steps:
 
-1. Go to [Google Takeout](https://takeout.google.com/) and click "Deselect all".
+1. Go to [takeout.google.com](https://takeout.google.com/) and click "Deselect all".
 
     <img src="images/DeselectAllTakeout.png" alt="Google Takeout deselect button" width="400"/>
 2. Scroll down and select "Google Photos".
