@@ -21,7 +21,7 @@ func Main() {
 	inputPath := flag.String("input", "", "Path to Google takeout directory")
 	outputPath := flag.String("output", "", "Path to output directory")
 	useSymlinks := flag.Bool("symlink", false, "Use symlinks inside of albums instead of duplicating images")
-	skipExif := flag.Bool("skip-exif", false, "Skip writing EXIF metadata to files")
+	skipMetadata := flag.Bool("skip-metadata", false, "Skip writing metadata to files")
 
 	flag.Parse()
 
@@ -33,8 +33,9 @@ func Main() {
 
 	progressCh := make(chan fixer.Progress)
 
-	options := fixer.ProcessOptions{UseSymlinks: *useSymlinks, WriteMetadata: !*skipExif}
-	go func() { // Invert skipExif because the flag is named skipExif but the process function expects writeMetadata
+	options := fixer.ProcessOptions{UseSymlinks: *useSymlinks, WriteMetadata: !*skipMetadata}
+	go func() {
+		// Invert skipMetadata because the flag is named skipMetadata but the process function expects writeMetadata
 		if err := fixer.Process(context.Background(), *inputPath, *outputPath, progressCh, options); err != nil {
 			fmt.Printf("Error during processing: %v\n", err)
 		}

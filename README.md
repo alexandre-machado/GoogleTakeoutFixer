@@ -54,11 +54,28 @@ To use GoogleTakeoutFixer, you must have downloaded your photos from Google Take
 1. Click **"Select Google Takeout folder"** and choose the folder where you extracted your Google Takeout photos. This folder is named something like "Google Photos".
 2. Click **"Select output folder"** and choose the folder where you want the fixed photos to be saved.
 3. Choose the options that you want to apply:
-    - **"Write EXIF metadata"**: Writes metadata from JSON files into the media files. May not be necessary.
+    - **"Write metadata"**: Writes metadata from JSON files into the media files. May not be necessary.
     - **"Use symlinks for albums"**: Creates file links instead of duplicating files for albums.
 5. Click **"Start processing"** and wait for the process to finish. The time it takes depends on the number of photos and videos you have.
 
 Once the process is complete, you can find your fixed files in the output folder you selected.
+
+---
+
+### CLI usage
+You can also use GoogleTakeoutFixer through the CLI. Use the following flags:
+- `--input "PATH"`: Path to Google takeout directory
+- `--output "PATH"`: Path to output directory
+- `--symlink`: Use symlinks inside of albums instead of duplicating images
+- `--skip-metadata`: Skip writing metadata to files
+- `--help`: Show help message
+
+Example usage:
+```sh
+./GoogleTakeoutFixer --input "/path/to/takeout/Google Photos/" --output "/path/to/output/folder/" --symlink
+``` 
+
+You might have to give the executable permissions to run on Linux and macOS using `chmod +x GoogleTakeoutFixer` before you can run it through the terminal.
 
 ## Planned Features
 - Support for more languages
