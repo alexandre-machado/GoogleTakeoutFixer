@@ -41,7 +41,6 @@ func Main() {
 			fmt.Println("Input folder:", inputPath)
 		}
 	})
-	//inputButton.Resize(fyne.NewSize(200, inputButton.MinSize().Height))
 
 	var outputButton *widget.Button
 	outputButton = widget.NewButton("Select Output Folder", func() {
@@ -52,7 +51,6 @@ func Main() {
 			fmt.Println("Output folder:", outputPath)
 		}
 	})
-	//outputButton.Resize(fyne.NewSize(200, outputButton.MinSize().Height))
 
 	// Checkboxes for options. Default value is false
 	UseLinksCheckbox := widget.NewCheck("Use symlinks for albums", func(value bool) {
