@@ -53,12 +53,12 @@ func Main() {
 	})
 
 	// Checkboxes for options. Default value is false
-	UseLinksCheckbox := widget.NewCheck("Use symlinks for albums", func(value bool) {
+	useLinksCheckbox := widget.NewCheck("Use symlinks for albums", func(value bool) {
 		useSymlinks = value
 		fmt.Println("use symlinks", useSymlinks)
 	})
 
-	WriteMetadataCheckbox := widget.NewCheck("Write metadata", func(value bool) {
+	writeMetadataCheckbox := widget.NewCheck("Write metadata", func(value bool) {
 		writeMetadata = value
 		fmt.Println("write metadata", writeMetadata)
 	})
@@ -152,26 +152,26 @@ func Main() {
 
 	logEntry.SetText(logEntry.Text + "Logs will appear here...\n")
 
-	FolderButtons := container.NewGridWithColumns(
+	folderButtons := container.NewGridWithColumns(
 		2,
 		inputButton,
 		outputButton,
 	)
 
-	CheckBoxes := container.NewVBox(
-		UseLinksCheckbox,
-		WriteMetadataCheckbox,
+	checkBoxes := container.NewVBox(
+		useLinksCheckbox,
+		writeMetadataCheckbox,
 	)
 
-	SecondRow := container.NewGridWithColumns(
+	secondRow := container.NewGridWithColumns(
 		2,
-		CheckBoxes,
+		checkBoxes,
 		container.NewGridWithColumns(2, startButton, cancelButton),
 	)
 
 	topContent := container.NewVBox(
-		FolderButtons,
-		SecondRow,
+		folderButtons,
+		secondRow,
 
 		progressLabel,
 		progressBar,
