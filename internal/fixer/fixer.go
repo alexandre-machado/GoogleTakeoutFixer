@@ -57,6 +57,20 @@ func Process(
 	progressCh chan<- Progress,
 	options ProcessOptions,
 ) error {
+	err := InitializeFileLogger()
+	if err != nil {
+		if LogHandler != nil {
+			LogHandler(LoggerWarn, fmt.Sprintf("Failed to initialize file logger: %v", err))
+		}
+	} else {
+		defer func() {
+			err := CloseFileLogger()
+			if err != nil && LogHandler != nil {
+				LogHandler(LoggerWarn, fmt.Sprintf("Failed to close file logger: %v", err))
+			}
+		}()
+	}
+
 	Log(LoggerInfo, "Starting processing with source: %s and output: %s", sourcePath, outputPath)
 
 	// Log total processing time when processing is done

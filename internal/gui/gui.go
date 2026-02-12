@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -141,16 +142,24 @@ func Main() {
 
 	logEntry := widget.NewMultiLineEntry()
 	logEntry.Disable()
+	const maxVisibleLogLines = 200
+	visibleLogLines := make([]string, 0, maxVisibleLogLines)
 
 	fixer.LogHandler = func(level fixer.LogLevel, message string) {
-		logMsg := fmt.Sprintf("[%s] %s\n", level, message)
+		logMsg := fmt.Sprintf("[%s] %s", level, message)
 		fyne.Do(func() {
-			logEntry.SetText(logEntry.Text + logMsg)
+			visibleLogLines = append(visibleLogLines, logMsg)
+			if len(visibleLogLines) > maxVisibleLogLines {
+				visibleLogLines = visibleLogLines[len(visibleLogLines)-maxVisibleLogLines:]
+			}
+
+			logEntry.SetText(strings.Join(visibleLogLines, "\n") + "\n")
 			logEntry.Refresh()
 		})
 	}
 
-	logEntry.SetText(logEntry.Text + "Logs will appear here...\n")
+	visibleLogLines = append(visibleLogLines, "Logs will appear here...")
+	logEntry.SetText("Logs will appear here...\n")
 
 	folderButtons := container.NewGridWithColumns(
 		2,
