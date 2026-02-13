@@ -214,13 +214,11 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 // Determine the timezone at a photo's GPS location using the "latlog" library
 // If no GPS data is available, fall back to local time
 func getPhotoTimezone(lat, lon float64) *time.Location {
-	fmt.Println(formatTimezoneOffset(3600))
 	if lat == 0 && lon == 0 {
 		return time.Local
 	}
 
 	tzName := latlong.LookupZoneName(lat, lon)
-	fmt.Println(tzName)
 	if tzName == "" {
 		// Fallback in case latlog fails to find a timezone
 		offsetSec := int(math.Round(lon/15.0)) * 3600
