@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/bradfitz/latlong"
 )
 
 // Struct to hold the structure of the JSON metadata
@@ -115,16 +117,28 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 		return fmt.Errorf("invalid timestamp: %v", err)
 	}
 
-	newTime := time.Unix(timestampInt, 0).UTC()
-	exifTime := newTime.Format("2006:01:02 15:04:05")
+	utcTime := time.Unix(timestampInt, 0).UTC()
+
+	// Determine timezone at the photo's GPS location.
+	photoLoc := getPhotoTimezone(meta.GeoData.Latitude, meta.GeoData.Longitude)
+	localTime := utcTime.In(photoLoc)
+	_, offsetSec := localTime.Zone()
+	offsetStr := formatTimezoneOffset(offsetSec)
+
+	exifTime := localTime.Format("2006:01:02 15:04:05")
+	// exiftime with timezone
+	exifTimeWithTZ := exifTime + offsetStr
 
 	args := []string{
 		"-overwrite_original",
-		"-AllDates=" + exifTime,
-		"-TrackCreateDate=" + exifTime,
-		"-MediaCreateDate=" + exifTime,
-		"-FileCreateDate=" + exifTime,
-		"-FileModifyDate=" + exifTime,
+		"-AllDates=" + exifTimeWithTZ,
+		"-TrackCreateDate=" + exifTimeWithTZ,
+		"-MediaCreateDate=" + exifTimeWithTZ,
+		"-FileCreateDate=" + exifTimeWithTZ,
+		"-FileModifyDate=" + exifTimeWithTZ,
+		"-OffsetTime=" + offsetStr,
+		"-OffsetTimeOriginal=" + offsetStr,
+		"-OffsetTimeDigitized=" + offsetStr,
 	}
 
 	// If a title exists, add it to args
@@ -156,8 +170,6 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 			fmt.Sprintf("-GPSLongitude=%f", math.Abs(lon)),
 			fmt.Sprintf("-GPSLongitudeRef=%s", lonRef),
 			fmt.Sprintf("-GPSAltitude=%f", meta.GeoData.Altitude),
-			"-CreateDate="+exifTime,
-			"-ModifyDate="+exifTime,
 		)
 	}
 
@@ -192,11 +204,49 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 	}
 
 	// Set the file system modification time to match
-	if err := os.Chtimes(filePath, newTime, newTime); err != nil {
+	if err := os.Chtimes(filePath, utcTime, utcTime); err != nil {
 		return fmt.Errorf("failed to set file timestamps: %v", err)
 	}
 
 	return nil
+}
+
+// Determine the timezone at a photo's GPS location using the "latlog" library
+// If no GPS data is available, fall back to local time
+func getPhotoTimezone(lat, lon float64) *time.Location {
+	fmt.Println(formatTimezoneOffset(3600))
+	if lat == 0 && lon == 0 {
+		return time.Local
+	}
+
+	tzName := latlong.LookupZoneName(lat, lon)
+	fmt.Println(tzName)
+	if tzName == "" {
+		// Fallback in case latlog fails to find a timezone
+		offsetSec := int(math.Round(lon/15.0)) * 3600
+		return time.FixedZone("Photo", offsetSec)
+	}
+
+	loc, err := time.LoadLocation(tzName)
+	if err != nil {
+		// Fallback in case loading timezone fails
+		offsetSec := int(math.Round(lon/15.0)) * 3600
+		return time.FixedZone("Photo", offsetSec)
+	}
+	return loc
+}
+
+// Format a timezone offset in seconds as "+hh:mm" / "-hh:mm" for EXIF
+// for example 3600 seconds becomes "+01:00"
+func formatTimezoneOffset(offsetSec int) string {
+	sign := "+"
+	if offsetSec < 0 {
+		sign = "-"
+		offsetSec = -offsetSec
+	}
+	hours := offsetSec / 3600
+	minutes := (offsetSec % 3600) / 60
+	return fmt.Sprintf("%s%02d:%02d", sign, hours, minutes)
 }
 
 // Exiftool process variables
