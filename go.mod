@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	fyne.io/fyne/v2 v2.7.2
+	github.com/bradfitz/latlong v0.0.0-20170410180902-f3db6d0dff40
 	github.com/ncruces/zenity v0.10.14
 )
 
@@ -11,7 +12,6 @@ require (
 	fyne.io/systray v1.12.0 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/akavel/rsrc v0.10.2 // indirect
-	github.com/bradfitz/latlong v0.0.0-20170410180902-f3db6d0dff40 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dchest/jsmin v0.0.0-20220218165748-59f39799265f // indirect
 	github.com/fredbi/uri v1.1.1 // indirect
@@ -28,6 +28,7 @@ require (
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.0 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade // indirect
+	github.com/jonas-p/go-shp v0.1.1 // indirect
 	github.com/josephspurrier/goversioninfo v1.4.1 // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
 	github.com/kr/text v0.2.0 // indirect
