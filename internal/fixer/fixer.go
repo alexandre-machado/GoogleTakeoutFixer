@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -32,16 +33,24 @@ type FixerContext struct {
 }
 
 // All media extension to differ between media files and other files
-var mediaExtensions = map[string]struct{}{
+var imageExtensions = map[string]struct{}{
 	".jpg":  {},
 	".jpeg": {},
 	".png":  {},
 	".heic": {},
+}
 
+var videoExtensions = map[string]struct{}{
 	".mp4": {},
 	".mov": {},
 	".avi": {},
 	".mkv": {},
+}
+
+func IsVideoFile(path string) bool {
+	extension := filepath.Ext(path)
+	_, ok := videoExtensions[strings.ToLower(extension)]
+	return ok
 }
 
 // Process is the main fixer entry point.
@@ -269,6 +278,17 @@ func ProcessFile(
 	if err != nil {
 		Log(LoggerError, "Error finding sidecar for file %s: %v", sourcePath, err)
 		return err
+	}
+
+	// If no sidecar is found and its a video file, try to find a partner image and use it's sidecar
+	if sidecarPath == "" && IsVideoFile(sourcePath) {
+		partnerImage, err := FindImagePartner(sourcePath)
+		if err == nil && partnerImage != "" {
+			partnerSidecar, err := FindSidecar(partnerImage)
+			if err == nil && partnerSidecar != "" {
+				sidecarPath = partnerSidecar
+			}
+		}
 	}
 
 	// Metadata sidecar file not found, copy the file without metadata

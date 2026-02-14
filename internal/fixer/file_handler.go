@@ -89,9 +89,40 @@ func IsYearFolder(dirPath string) (bool, error) {
 
 // Checks whether a file, that is provided using its path, is a media file
 func IsMediaFile(path string) bool {
-	extension := filepath.Ext(path)
-	_, ok := mediaExtensions[strings.ToLower(extension)]
-	return ok
+	extension := strings.ToLower(filepath.Ext(path))
+	_, isImage := imageExtensions[extension]
+	_, isVideo := videoExtensions[extension]
+	return isImage || isVideo
+}
+
+// Attempts to find an image file with the same base name as the video file
+// This is used for live photos where the metadata is the images sidecar
+// I think error handling could be improved here
+func FindImagePartner(videoPath string) (string, error) {
+	if !IsVideoFile(videoPath) {
+		return "", nil
+	}
+
+	dir := filepath.Dir(videoPath)
+	extension := filepath.Ext(videoPath)
+	base := strings.TrimSuffix(filepath.Base(videoPath), extension)
+
+	// Check all image extensions for a match
+	for imgExt := range imageExtensions {
+		candidate := filepath.Join(dir, base+imgExt)
+
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+
+		// Try uppercase extension
+		candidateUpper := filepath.Join(dir, base+strings.ToUpper(imgExt))
+		if _, err := os.Stat(candidateUpper); err == nil {
+			return candidateUpper, nil
+		}
+	}
+
+	return "", nil
 }
 
 // Counts all processable files in the source path
