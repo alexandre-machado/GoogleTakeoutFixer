@@ -60,6 +60,8 @@ To use GoogleTakeoutFixer, you must have downloaded your photos from Google Take
 
 Once the process is complete, you can find your fixed files in the output folder you selected.
 
+You will be able to find a full log file inside of the GoogleTakeoutFixer folder inside of the `logs` folder.
+
 ---
 
 ### CLI usage
