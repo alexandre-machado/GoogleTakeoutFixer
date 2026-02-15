@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/bradfitz/latlong"
 )
@@ -221,6 +222,7 @@ func getPhotoTimezone(lat, lon float64) *time.Location {
 	tzName := latlong.LookupZoneName(lat, lon)
 	if tzName == "" {
 		// Fallback in case latlog fails to find a timezone
+		Log(LoggerWarn, "Could not look up timezone for coordinates lat=%f, lon=%f", lat, lon)
 		offsetSec := int(math.Round(lon/15.0)) * 3600
 		return time.FixedZone("Photo", offsetSec)
 	}
@@ -228,6 +230,7 @@ func getPhotoTimezone(lat, lon float64) *time.Location {
 	loc, err := time.LoadLocation(tzName)
 	if err != nil {
 		// Fallback in case loading timezone fails
+		Log(LoggerWarn, "Could not load timezone '%s'", tzName)
 		offsetSec := int(math.Round(lon/15.0)) * 3600
 		return time.FixedZone("Photo", offsetSec)
 	}
