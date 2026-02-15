@@ -1,8 +1,8 @@
 # GoogleTakeoutFixer
 
-![GitHub Repo stars](https://img.shields.io/github/stars/feloex/GoogleTakeoutFixer?style=flat&color=yellow)
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/feloex/GoogleTakeoutFixer/total?style=flat&color=dark-green)
-![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/feloex/GoogleTakeoutFixer/latest/total?style=flat&color=dark-green)
+[![GitHub Repo stars](https://img.shields.io/github/stars/feloex/GoogleTakeoutFixer?style=flat&color=yellow&link=https%3A%2F%2Fgithub.com%2Ffeloex%2FGoogleTakeoutFixer)](https://github.com/feloex/GoogleTakeoutFixer)
+[![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/feloex/GoogleTakeoutFixer/total?style=flat&color=dark-green)](https://github.com/feloex/GoogleTakeoutFixer/releases)
+[![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/feloex/GoogleTakeoutFixer/latest/total?style=flat&color=dark-green)](https://github.com/feloex/GoogleTakeoutFixer/releases/latest)
 [![Go Report Card](https://goreportcard.com/badge/github.com/feloex/GoogleTakeoutFixer)](https://goreportcard.com/report/github.com/feloex/GoogleTakeoutFixer)
 
 <p align="center">
