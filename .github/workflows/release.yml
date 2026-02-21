@@ -1,6 +1,6 @@
 # Made with much help from AI
 # Builds and releases binaries for Linux, Windows, and macOS (universal)
-# Bundles ExifTool with each release and includes legal documents
+# Bundles ExifTool with each release
 name: Release
 
 on:
@@ -13,19 +13,9 @@ permissions:
 
 env:
   APP_NAME: GoogleTakeoutFixer
-  GO_VERSION: "stable"
-  
-  # Exiftool versions and hashes
-  EXIFTOOL_VERSION: "13.50"
-  ET_SHA256_TGZ: "27e2d66eb21568cc0d59520f89afcaaa50735e1ad9fa4b36d0a4ccf916c70d31"
-  ET_SHA256_ZIP: "40f10e6edabeef14b4585a747672691dd708d4455eb8e097256e439709806e8d"
-  
-  # Official perl artistic license (Pinned version tag v5.38.2 for stability)
-  ARTISTIC_LICENSE_URL: "https://raw.githubusercontent.com/perl/perl5/v5.38.2/Artistic"
-  ARTISTIC_LICENSE_SHA256: "dd90d4f42e4dcadf5a7c09eea0189d93c7b37ae560c91f0f6d5233ed3b9292a2"
 
 jobs:
-  # Linux
+
   build-linux:
     name: Build Linux x64
     runs-on: ubuntu-latest
@@ -33,51 +23,40 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
 
       - name: Build & Bundle
         run: |
           set -euo pipefail
           OUT="${APP_NAME}_Linux_x64"
-          LEGAL_DIR="${OUT}/legal/ExifTool"
-          mkdir -p "${LEGAL_DIR}"
-          # 1. Build Go App
-          echo "Building Go App..."
+          mkdir -p "${OUT}"
+
           CGO_ENABLED=1 go build -ldflags "-s -w" -o "${OUT}/${APP_NAME}" ./cmd/main.go
-          # 2. ExifTool (Source TGZ verified)
-          echo "Downloading ExifTool..."
-          curl -fL --retry 3 -o et.tgz "https://exiftool.org/Image-ExifTool-${EXIFTOOL_VERSION}.tar.gz"
-          echo "${ET_SHA256_TGZ}  et.tgz" | sha256sum -c - || { echo "ExifTool TGZ Hash mismatch!"; exit 1; }
-          
+
+          ET_VERSION="$(curl -fsSL --retry 3 https://exiftool.org/ver.txt | tr -d '[:space:]')"
+          curl -fsSL --retry 3 -o et.tgz "https://exiftool.org/Image-ExifTool-${ET_VERSION}.tar.gz"
           tar xf et.tgz
-          ET_SRC="Image-ExifTool-${EXIFTOOL_VERSION}"
-          cp "${ET_SRC}/exiftool" "${OUT}/"
-          cp -r "${ET_SRC}/lib" "${OUT}/"
-          # 3. Legal Documents
-          echo "Processing Licenses..."
-          # Readme from verified source tarball
-          cp "${ET_SRC}/README" "${LEGAL_DIR}/README.txt"
-          
-          # Artistic license from official Perl repo with hash check
-          echo "Downloading License Text..."
-          curl -fL --retry 3 -o "${LEGAL_DIR}/LICENSE.txt" "${ARTISTIC_LICENSE_URL}"
-          echo "${ARTISTIC_LICENSE_SHA256}  ${LEGAL_DIR}/LICENSE.txt" | sha256sum -c - || { echo "Artistic License Hash mismatch! Please update the hash in env."; exit 1; }
-          # GoogleTakeoutFixer own license
-          [ -f LICENSE ] && cp LICENSE "${OUT}/legal/LICENSE.txt"
-          # 4. Run Script
-          printf '#!/bin/bash\ncd "$(dirname "$0")"\nchmod +x ./%s ./exiftool\n./%s\n' \
-            "${APP_NAME}" "${APP_NAME}" > "${OUT}/run.sh"
-          chmod +x "${OUT}/run.sh" "${OUT}/${APP_NAME}" "${OUT}/exiftool"
+          cp "Image-ExifTool-${ET_VERSION}/exiftool" "${OUT}/"
+          cp -r "Image-ExifTool-${ET_VERSION}/lib" "${OUT}/"
+          chmod +x "${OUT}/exiftool"
+
+          cp LICENSE "${OUT}/LICENSE.txt"
+          [ -f README.md ] && cp README.md "${OUT}/README.md"
+
+          printf '#!/usr/bin/env bash\ncd "$(dirname "$0")"\nexec ./%s "$@"\n' "${APP_NAME}" > "${OUT}/run.sh"
+          chmod +x "${OUT}/run.sh"
+
           tar czf "${OUT}.tar.gz" "${OUT}"
+
       - uses: actions/upload-artifact@v4
         with:
           name: asset-linux
           path: ${{ env.APP_NAME }}_Linux_x64.tar.gz
 
-  # Windows
+
   build-windows:
     name: Build Windows x64
     runs-on: ubuntu-latest
@@ -85,57 +64,37 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
-      - name: Install MinGW
+      - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64 zip
 
       - name: Build & Bundle
         run: |
           set -euo pipefail
           OUT="${APP_NAME}_Windows_x64"
-          LEGAL_DIR="${OUT}/legal/ExifTool"
-          mkdir -p "${LEGAL_DIR}"
-          # 1. Build Go App
+          mkdir -p "${OUT}"
+
           CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc \
             go build -ldflags "-s -w -H=windowsgui" -o "${OUT}/${APP_NAME}.exe" ./cmd/main.go
-          # 2. ExifTool (Windows ZIP verified)
-          echo "Downloading ExifTool Windows..."
-          curl -fL --retry 3 -o et.zip "https://exiftool.org/exiftool-${EXIFTOOL_VERSION}_64.zip"
-          echo "${ET_SHA256_ZIP}  et.zip" | sha256sum -c - || { echo "ExifTool ZIP Hash mismatch!"; exit 1; }
-          
+
+          ET_VERSION="$(curl -fsSL --retry 3 https://exiftool.org/ver.txt | tr -d '[:space:]')"
+          curl -fsSL --retry 3 -o et.zip "https://exiftool.org/exiftool-${ET_VERSION}_64.zip"
           unzip -q et.zip
-          EXE=$(find . -maxdepth 3 -name 'exiftool(-k).exe' | head -1)
-          mv "$EXE" "${OUT}/exiftool.exe"
+          mv "$(find . -maxdepth 3 -name 'exiftool(-k).exe' | head -1)" "${OUT}/exiftool.exe"
           find . -maxdepth 3 -type d -name 'exiftool_files' -exec cp -r {} "${OUT}/" \; 2>/dev/null || true
-          # 3. Legal Documents
-          # README from source tarball (verified)
-          curl -fL --retry 3 -o et_src.tgz "https://exiftool.org/Image-ExifTool-${EXIFTOOL_VERSION}.tar.gz"
-          echo "${ET_SHA256_TGZ}  et_src.tgz" | sha256sum -c - || { echo "ExifTool Source TGZ Hash mismatch!"; exit 1; }
-          tar xf et_src.tgz "Image-ExifTool-${EXIFTOOL_VERSION}/README"
-          mv "Image-ExifTool-${EXIFTOOL_VERSION}/README" "${LEGAL_DIR}/README.txt"
-          # Artistic license (from source tarball if available)
-          tar xf et_src.tgz "Image-ExifTool-${EXIFTOOL_VERSION}/LICENSE" 2>/dev/null || true
-          if [ -f "Image-ExifTool-${EXIFTOOL_VERSION}/LICENSE" ]; then
-            mv "Image-ExifTool-${EXIFTOOL_VERSION}/LICENSE" "${LEGAL_DIR}/LICENSE_Artistic.txt"
-          else
-            # Fallback: official Artistic License
-            curl -fL --retry 3 -o "${LEGAL_DIR}/LICENSE_Artistic.txt" "${ARTISTIC_LICENSE_URL}"
-            echo "${ARTISTIC_LICENSE_SHA256}  ${LEGAL_DIR}/LICENSE_Artistic.txt" | sha256sum -c -
-          fi
-          # Take over GPL License from windows distribution 
-          if [ -f "${OUT}/exiftool_files/LICENSE" ]; then
-            cp "${OUT}/exiftool_files/LICENSE" "${LEGAL_DIR}/LICENSE_GPL.txt"
-          fi
-          # Own license
-          [ -f LICENSE ] && cp LICENSE "${OUT}/legal/LICENSE.txt"
+
+          cp LICENSE "${OUT}/LICENSE.txt"
+          [ -f README.md ] && cp README.md "${OUT}/README.md"
+
           zip -r "${OUT}.zip" "${OUT}"
+
       - uses: actions/upload-artifact@v4
         with:
           name: asset-windows
           path: ${{ env.APP_NAME }}_Windows_x64.zip
 
-  # Macos
+
   build-macos:
     name: Build macOS Universal
     runs-on: macos-latest
@@ -143,58 +102,51 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Build & Bundle
         run: |
           set -euo pipefail
           OUT="${APP_NAME}_macOS_universal"
-          LEGAL_DIR="${OUT}/legal/ExifTool"
-          mkdir -p "${LEGAL_DIR}"
-          # 1. Build Universal Binary
+          mkdir -p "${OUT}"
+
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
-            go build -ldflags "-s -w" -o arm64_bin ./cmd/main.go
+            go build -ldflags "-s -w" -o bin_arm64 ./cmd/main.go
           CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
             CGO_CFLAGS="-arch x86_64" CGO_LDFLAGS="-arch x86_64" \
-            go build -ldflags "-s -w" -o amd64_bin ./cmd/main.go
-          lipo -create -output "${OUT}/${APP_NAME}" amd64_bin arm64_bin
+            go build -ldflags "-s -w" -o bin_amd64 ./cmd/main.go
+          lipo -create -output "${OUT}/${APP_NAME}" bin_arm64 bin_amd64
           chmod +x "${OUT}/${APP_NAME}"
-          # 2. ExifTool (Source TGZ verified)
-          echo "Downloading ExifTool..."
-          curl -fL --retry 3 -o et.tgz "https://exiftool.org/Image-ExifTool-${EXIFTOOL_VERSION}.tar.gz"
-          echo "${ET_SHA256_TGZ}  et.tgz" | shasum -a 256 -c - || { echo "ExifTool TGZ Hash mismatch!"; exit 1; }
-          
+
+          ET_VERSION="$(curl -fsSL --retry 3 https://exiftool.org/ver.txt | tr -d '[:space:]')"
+          curl -fsSL --retry 3 -o et.tgz "https://exiftool.org/Image-ExifTool-${ET_VERSION}.tar.gz"
           tar xf et.tgz
-          ET_SRC="Image-ExifTool-${EXIFTOOL_VERSION}"
-          cp "${ET_SRC}/exiftool" "${OUT}/"
-          cp -r "${ET_SRC}/lib" "${OUT}/"
-          
-          # 3. Legal Documents
-          cp "${ET_SRC}/README" "${LEGAL_DIR}/README.txt"
-          
-          # Artistic License
-          curl -fL --retry 3 -o "${LEGAL_DIR}/LICENSE.txt" "${ARTISTIC_LICENSE_URL}"
-          echo "${ARTISTIC_LICENSE_SHA256}  ${LEGAL_DIR}/LICENSE.txt" | shasum -a 256 -c - || { echo "Artistic License Hash mismatch! Please update the hash in env."; exit 1; }
-          [ -f LICENSE ] && cp LICENSE "${OUT}/legal/LICENSE.txt"
+          cp "Image-ExifTool-${ET_VERSION}/exiftool" "${OUT}/"
+          cp -r "Image-ExifTool-${ET_VERSION}/lib" "${OUT}/"
           chmod +x "${OUT}/exiftool"
+
+          cp LICENSE "${OUT}/LICENSE.txt"
+          [ -f README.md ] && cp README.md "${OUT}/README.md"
+
           tar czf "${OUT}.tar.gz" "${OUT}"
+
       - uses: actions/upload-artifact@v4
         with:
           name: asset-macos
           path: ${{ env.APP_NAME }}_macOS_universal.tar.gz
 
-  # Release
+
   release:
     name: Release
     runs-on: ubuntu-latest
     needs: [build-linux, build-windows, build-macos]
-    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/download-artifact@v4
         with:
           pattern: asset-*
           path: .
           merge-multiple: true
+
       - uses: softprops/action-gh-release@v2
         with:
           files: |
