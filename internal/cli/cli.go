@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 
 	"github.com/feloex/GoogleTakeoutFixer/internal/fixer"
+	version "github.com/feloex/GoogleTakeoutFixer/internal/version"
 )
 
 func Main() {
@@ -36,12 +37,18 @@ func Main() {
 	}
 
 	// Command-line flags
+	showVersion := flag.Bool("version", false, "Show current version")
 	inputPath := flag.String("input", "", "Path to Google takeout directory")
 	outputPath := flag.String("output", "", "Path to output directory")
 	useSymlinks := flag.Bool("symlink", false, "Use symlinks inside of albums instead of duplicating images")
 	skipMetadata := flag.Bool("skip-metadata", false, "Skip writing metadata to files")
 
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.Tag)
+		return
+	}
 
 	if *inputPath == "" || *outputPath == "" {
 		fmt.Println("Error: --input and --output are required")

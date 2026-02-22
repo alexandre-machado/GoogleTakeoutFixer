@@ -29,6 +29,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 	"github.com/feloex/GoogleTakeoutFixer/internal/fixer"
+	version "github.com/feloex/GoogleTakeoutFixer/internal/version"
 	"github.com/ncruces/zenity"
 )
 
@@ -38,7 +39,7 @@ func Main() {
 	// Create app / window
 	a := app.New()
 	a.SetIcon(resourceGoogleTakeoutFixerPng)
-	w := a.NewWindow("GoogleTakeoutFixer")
+	w := a.NewWindow("GoogleTakeoutFixer " + version.Tag)
 	w.Resize(fyne.NewSize(550, 400))
 
 	var useSymlinks bool = false

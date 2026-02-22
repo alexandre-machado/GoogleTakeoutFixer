@@ -34,7 +34,9 @@ jobs:
           OUT="${APP_NAME}_Linux_x64"
           mkdir -p "${OUT}"
 
-          CGO_ENABLED=1 go build -ldflags "-s -w" -o "${OUT}/${APP_NAME}" ./cmd/main.go
+          VERSION="${GITHUB_REF#refs/tags/}"
+
+          CGO_ENABLED=1 go build -ldflags "-X github.com/feloex/GoogleTakeoutFixer/internal/version.Tag=${VERSION} -s -w" -o "${OUT}/${APP_NAME}" ./cmd/main.go
 
           ET_VERSION="$(curl -fsSL --retry 3 https://exiftool.org/ver.txt | tr -d '[:space:]')"
           curl -fsSL --retry 3 -o et.tgz "https://exiftool.org/Image-ExifTool-${ET_VERSION}.tar.gz"
@@ -75,8 +77,10 @@ jobs:
           OUT="${APP_NAME}_Windows_x64"
           mkdir -p "${OUT}"
 
+          VERSION="${GITHUB_REF#refs/tags/}"
+
           CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc \
-            go build -ldflags "-s -w -H=windowsgui" -o "${OUT}/${APP_NAME}.exe" ./cmd/main.go
+            go build -ldflags "-X github.com/feloex/GoogleTakeoutFixer/internal/version.Tag=${VERSION} -s -w -H=windowsgui" -o "${OUT}/${APP_NAME}.exe" ./cmd/main.go
 
           ET_VERSION="$(curl -fsSL --retry 3 https://exiftool.org/ver.txt | tr -d '[:space:]')"
           curl -fsSL --retry 3 -o et.zip "https://exiftool.org/exiftool-${ET_VERSION}_64.zip"
@@ -110,11 +114,13 @@ jobs:
           OUT="${APP_NAME}_macOS_universal"
           mkdir -p "${OUT}"
 
+          VERSION="${GITHUB_REF#refs/tags/}"
+
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
-            go build -ldflags "-s -w" -o bin_arm64 ./cmd/main.go
+            go build -ldflags "-X github.com/feloex/GoogleTakeoutFixer/internal/version.Tag=${VERSION} -s -w" -o bin_arm64 ./cmd/main.go
           CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
             CGO_CFLAGS="-arch x86_64" CGO_LDFLAGS="-arch x86_64" \
-            go build -ldflags "-s -w" -o bin_amd64 ./cmd/main.go
+            go build -ldflags "-X github.com/feloex/GoogleTakeoutFixer/internal/version.Tag=${VERSION} -s -w" -o bin_amd64 ./cmd/main.go
           lipo -create -output "${OUT}/${APP_NAME}" bin_arm64 bin_amd64
           chmod +x "${OUT}/${APP_NAME}"
 
