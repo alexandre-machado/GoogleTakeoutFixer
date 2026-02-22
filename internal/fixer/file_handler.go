@@ -88,12 +88,21 @@ func DiscoverDirs(path string) ([]os.DirEntry, error) {
 
 // Find a matching sidecar JSON
 func FindSidecar(imagePath string) (string, error) {
-	// Example: photoname.jpg.supplemental-metadata.json
-	pattern := imagePath + ".supplemental-*.json"
+	// Scan directory non case sensitively for supplemental JSON sidecar files
+	dir := filepath.Dir(imagePath)
+	prefix := strings.ToLower(filepath.Base(imagePath)) + ".supplemental-"
 
-	matches, err := filepath.Glob(pattern)
-	if err == nil && len(matches) > 0 {
-		return matches[0], nil
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		lower := strings.ToLower(name)
+		if strings.HasPrefix(lower, prefix) && strings.HasSuffix(lower, ".json") {
+			return filepath.Join(dir, name), nil
+		}
 	}
 
 	return "", nil
