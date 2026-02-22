@@ -98,4 +98,4 @@ You might have to give the executable permissions to run on Linux and macOS usin
 This project modifies metadata using the [ExifTool](https://exiftool.org/) library by **Phil Harvey**. ExifTool is licensed under the Perl Artistic license, or the GNU General Public License (see [here](https://exiftool.org/#license) for more details).
 
 ## Disclaimer
-This project is an **independent open-source project** and is **not affiliated with, endorsed, or sponsored by Google LLC or any of its subsidiaries**. The use of the name "Google" in this repository is solely for descriptive purposes.
+Not affiliated with Google LLC.
