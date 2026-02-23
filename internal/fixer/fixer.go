@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -37,8 +38,11 @@ type Progress struct {
 // TODO: Add more options
 // TODO: Disable checkboxes when processing
 type ProcessOptions struct {
-	UseSymlinks   bool
-	WriteMetadata bool
+	UseSymlinks     bool
+	WriteMetadata   bool
+	MonthSubfolders bool
+	IgnoreAlbums    bool
+	Flatten         bool
 }
 
 type FixerContext struct {
@@ -136,10 +140,20 @@ func Process(
 
 			dirPath := filepath.Join(sourcePath, dir.Name())
 			var targetPath string = filepath.Join(outputPath, dir.Name())
-			p = ProcessDirectory(fixerCtx, dirPath, targetPath, p)
+
+			isYearFolder, err := IsYearFolder(dir.Name())
+			if err != nil {
+				Log(LoggerWarn, "Failed to determine if folder is a year folder for %s: %v", dir.Name(), err)
+			}
+			if (options.IgnoreAlbums || options.Flatten) && !isYearFolder {
+				Log(LoggerInfo, "Skipping album folder: %s", dir.Name())
+				continue
+			}
+
+			p = ProcessDirectory(fixerCtx, dirPath, targetPath, isYearFolder, p)
 		}
 	} else {
-		err = ProcessFile(fixerCtx, sourcePath, outputPath)
+		err = ProcessFile(fixerCtx, sourcePath, "", false)
 		if err != nil {
 			Log(LoggerError, "Error processing file: %v", err)
 		} else {
@@ -157,6 +171,7 @@ func ProcessDirectory(
 	fixerCtx *FixerContext,
 	dirPath string,
 	outputPath string,
+	isYearFolder bool,
 	p Progress,
 ) Progress {
 	files, err := os.ReadDir(dirPath)
@@ -173,6 +188,8 @@ func ProcessDirectory(
 	// Channel to capture errors
 	errors := make(chan error)
 
+	sourceDirName := filepath.Base(dirPath)
+
 	var wg sync.WaitGroup
 	workerCount := runtime.NumCPU() * 2 // x2 is faster for IO tasks, x more than that has no effect based on testing
 
@@ -184,7 +201,7 @@ func ProcessDirectory(
 					wg.Done()
 					continue
 				}
-				err := ProcessFile(fixerCtx, imagePath, outputPath)
+				err := ProcessFile(fixerCtx, imagePath, sourceDirName, isYearFolder)
 				if err != nil {
 					errors <- fmt.Errorf("error processing file %s: %w", imagePath, err)
 				} else {
@@ -259,15 +276,11 @@ func ProcessDirectory(
 func ProcessFile(
 	fixerCtx *FixerContext,
 	sourcePath string,
-	outputPath string,
+	sourceDirName string,
+	isYearFolder bool,
 ) error {
 	fileName := filepath.Base(sourcePath)
-	destPath := filepath.Join(outputPath, fileName)
-
-	if _, err := os.Stat(destPath); err == nil {
-		Log(LoggerInfo, "File %s already exists, skipping", destPath)
-		return nil
-	}
+	//destPath := filepath.Join(outputPath, fileName)
 
 	sidecarPath, err := FindSidecar(sourcePath)
 
@@ -285,6 +298,18 @@ func ProcessFile(
 				sidecarPath = partnerSidecar
 			}
 		}
+	}
+
+	outputDir, err := ResolveOutputDir(fixerCtx, sourcePath, sidecarPath, sourceDirName, isYearFolder)
+	if err != nil {
+		return err
+	}
+
+	destPath := filepath.Join(outputDir, fileName)
+
+	if _, err := os.Stat(destPath); err == nil {
+		Log(LoggerInfo, "File %s already exists, skipping", destPath)
+		return nil
 	}
 
 	// Metadata sidecar file not found, copy the file without metadata
@@ -370,4 +395,57 @@ func CreateFixedFile(
 	}
 
 	return nil
+}
+
+func ResolveOutputDir(
+	fixerCtx *FixerContext,
+	sourcePath string,
+	sidecarPath string,
+	sourceDirName string,
+	isYearFolder bool,
+) (string, error) {
+	if fixerCtx.Options.Flatten {
+		return fixerCtx.OutputRoot, nil
+	}
+
+	targetDir := fixerCtx.OutputRoot
+	if sourceDirName != "" /*&& !fixerCtx.Options.IgnoreAlbums && !isYearFolder*/ {
+		targetDir = filepath.Join(targetDir, sourceDirName)
+	}
+
+	if !isYearFolder || !fixerCtx.Options.MonthSubfolders {
+		return targetDir, nil
+	}
+
+	month, err := DetectFileMonth(sourcePath, sidecarPath)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(targetDir, strconv.Itoa(month)), nil
+}
+
+// Detect the month of a file based on its sidecar metadata
+// Returns the month as an integer between 1 and 12
+func DetectFileMonth(sourcePath string, sidecarPath string) (int, error) {
+	if sidecarPath != "" {
+		metadata, err := ReadJsonMetadata(sidecarPath)
+		if err != nil {
+			return 0, err
+		}
+
+		timestamp, err := strconv.ParseInt(metadata.PhotoTakenTime.Timestamp, 10, 64)
+		if err != nil {
+			return 0, err
+		}
+
+		return int(time.Unix(timestamp, 0).Month()), nil
+	}
+
+	fileInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		return 0, err
+	}
+
+	return int(fileInfo.ModTime().Month()), nil
 }

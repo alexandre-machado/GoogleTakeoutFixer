@@ -42,6 +42,9 @@ func Main() {
 	outputPath := flag.String("output", "", "Path to output directory")
 	useSymlinks := flag.Bool("symlink", false, "Use symlinks inside of albums instead of duplicating images")
 	skipMetadata := flag.Bool("skip-metadata", false, "Skip writing metadata to files")
+	ignoreAlbums := flag.Bool("ignore-albums", false, "Ignore all album folders")
+	monthSubfolders := flag.Bool("month-subfolders", false, "Create month subfolders (1-12) inside year folders")
+	flatten := flag.Bool("flatten", false, "Put all media files directly in the output folder without year/album subfolders")
 
 	flag.Parse()
 
@@ -58,7 +61,14 @@ func Main() {
 
 	progressCh := make(chan fixer.Progress)
 
-	options := fixer.ProcessOptions{UseSymlinks: *useSymlinks, WriteMetadata: !*skipMetadata}
+	options := fixer.ProcessOptions{
+		UseSymlinks:     *useSymlinks,
+		WriteMetadata:   !*skipMetadata,
+		Flatten:         *flatten,
+		IgnoreAlbums:    *ignoreAlbums,
+		MonthSubfolders: *monthSubfolders,
+	}
+
 	go func() {
 		// Invert skipMetadata because the flag is named skipMetadata but the process function expects writeMetadata
 		if err := fixer.Process(context.Background(), *inputPath, *outputPath, progressCh, options); err != nil {
