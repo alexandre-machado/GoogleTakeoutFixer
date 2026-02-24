@@ -315,14 +315,14 @@ func ProcessFile(
 	// Metadata sidecar file not found, copy the file without metadata
 	if sidecarPath == "" {
 		Log(LoggerWarn, "No sidecar file found for %s — copying without metadata", sourcePath)
-		if err := CreateFixedFile(fixerCtx, sourcePath, "", destPath); err != nil {
+		if err := CreateFixedFile(fixerCtx, sourcePath, "", destPath, isYearFolder); err != nil {
 			Log(LoggerError, "Error creating file without sidecar for %s: %v", sourcePath, err)
 			return err
 		}
 		return nil
 	}
 
-	err = CreateFixedFile(fixerCtx, sourcePath, sidecarPath, destPath)
+	err = CreateFixedFile(fixerCtx, sourcePath, sidecarPath, destPath, isYearFolder)
 	if err != nil {
 		Log(LoggerError, "Error creating fixed file for %s: %v", sourcePath, err)
 		return err
@@ -336,6 +336,7 @@ func CreateFixedFile(
 	filePath string,
 	fileMetadataPath string,
 	destPath string,
+	isYearFolder bool,
 ) error {
 	// Ensure output directory exists
 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
@@ -344,9 +345,15 @@ func CreateFixedFile(
 
 	fileName := filepath.Base(destPath)
 
-	isYearFolder, _ := IsYearFolder(filepath.Base(filepath.Dir(destPath)))
-
 	if fixerCtx.Options.UseSymlinks && !isYearFolder {
+		monthFolder := ""
+		if fixerCtx.Options.MonthSubfolders {
+			month, err := DetectFileMonth(filePath, fileMetadataPath)
+			if err == nil {
+				monthFolder = strconv.Itoa(month)
+			}
+		}
+
 		// Attempt to find the file inside of any year folder in the output
 		// TODO: Make this more efficient, whole output directory is being searched every time
 		entries, _ := os.ReadDir(fixerCtx.OutputRoot)
@@ -360,16 +367,23 @@ func CreateFixedFile(
 				continue
 			}
 
-			target := filepath.Join(fixerCtx.OutputRoot, curEntry.Name(), fileName)
-			if _, err := os.Stat(target); err == nil {
-				if err := os.Symlink(target, destPath); err != nil {
-					// Symlink failed, continue with normal copy
-					if !os.IsExist(err) {
-						return fmt.Errorf("Failed to create symlink: %w", err)
+			targetPaths := []string{}
+			if monthFolder != "" {
+				targetPaths = append(targetPaths, filepath.Join(fixerCtx.OutputRoot, curEntry.Name(), monthFolder, fileName))
+			}
+			targetPaths = append(targetPaths, filepath.Join(fixerCtx.OutputRoot, curEntry.Name(), fileName))
+
+			for _, target := range targetPaths {
+				if _, err := os.Stat(target); err == nil {
+					if err := os.Symlink(target, destPath); err != nil {
+						// Symlink failed, continue with normal copy
+						if !os.IsExist(err) {
+							return fmt.Errorf("Failed to create symlink: %w", err)
+						}
+					} else {
+						// Symlink successful
+						return nil
 					}
-				} else {
-					// Symlink successful
-					return nil
 				}
 			}
 		}
@@ -413,7 +427,7 @@ func ResolveOutputDir(
 		targetDir = filepath.Join(targetDir, sourceDirName)
 	}
 
-	if !isYearFolder || !fixerCtx.Options.MonthSubfolders {
+	if !fixerCtx.Options.MonthSubfolders {
 		return targetDir, nil
 	}
 
