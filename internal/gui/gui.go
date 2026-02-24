@@ -44,6 +44,9 @@ func Main() {
 
 	var useSymlinks bool = false
 	var writeMetadata bool = false
+	var flatten bool = false
+	var ignoreAlbums bool = false
+	var monthSubfolders bool = false
 
 	progressLabel := widget.NewLabel("")
 	progressLabel.Truncation = fyne.TextTruncateEllipsis
@@ -83,6 +86,45 @@ func Main() {
 		fmt.Println("write metadata", writeMetadata)
 	})
 
+	ignoreAlbumsCheckbox := widget.NewCheck("Ignore album folders", func(value bool) {
+		ignoreAlbums = value
+		fmt.Println("ignore albums", ignoreAlbums)
+	})
+
+	monthSubfoldersCheckbox := widget.NewCheck("Create month subfolders", func(value bool) {
+		monthSubfolders = value
+		fmt.Println("month subfolders", monthSubfolders)
+	})
+
+	flattenCheckbox := widget.NewCheck("Flatten album structure", func(value bool) {
+		flatten = value
+		fmt.Println("flatten", flatten)
+	})
+
+	// Fix conflicting options
+	updateCheckboxStates := func() {
+		setEnabled := func(cb *widget.Check, enabled bool) {
+			if enabled {
+				cb.Enable()
+			} else {
+				cb.Disable()
+			}
+		}
+		setEnabled(useLinksCheckbox, !ignoreAlbums && !flatten)
+		setEnabled(ignoreAlbumsCheckbox, !useSymlinks && !flatten)
+		setEnabled(flattenCheckbox, !useSymlinks && !ignoreAlbums && !monthSubfolders)
+		setEnabled(monthSubfoldersCheckbox, !flatten)
+	}
+
+	for _, cb := range []*widget.Check{useLinksCheckbox, ignoreAlbumsCheckbox, flattenCheckbox, monthSubfoldersCheckbox} {
+		cb := cb
+		prev := cb.OnChanged
+		cb.OnChanged = func(v bool) {
+			prev(v)
+			updateCheckboxStates()
+		}
+	}
+
 	// Button to start processing
 	var startButton *widget.Button
 	startButton = widget.NewButton("Start Processing", func() {
@@ -105,7 +147,13 @@ func Main() {
 
 		progressCh := make(chan fixer.Progress)
 
-		opts := fixer.ProcessOptions{UseSymlinks: useSymlinks, WriteMetadata: writeMetadata}
+		opts := fixer.ProcessOptions{
+			UseSymlinks:     useSymlinks,
+			WriteMetadata:   writeMetadata,
+			Flatten:         flatten,
+			IgnoreAlbums:    ignoreAlbums,
+			MonthSubfolders: monthSubfolders,
+		}
 		go func() {
 			if err := fixer.Process(ctx, inputPath, outputPath, progressCh, opts); err != nil {
 				if ctx.Err() == nil {
@@ -204,6 +252,9 @@ func Main() {
 	checkBoxes := container.NewVBox(
 		useLinksCheckbox,
 		writeMetadataCheckbox,
+		ignoreAlbumsCheckbox,
+		monthSubfoldersCheckbox,
+		flattenCheckbox,
 	)
 
 	secondRow := container.NewGridWithColumns(

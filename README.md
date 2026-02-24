@@ -90,7 +90,6 @@ You might have to give the executable permissions to run on Linux and macOS usin
 ## Planned Features
 - Better looking and more user-friendly GUI
 - The ability to apply different settings to different albums or folders
-- More options for how to organize / structure the output folder
 - A simple website for users who are not familiar with Github
 - Pull request and issue template
 

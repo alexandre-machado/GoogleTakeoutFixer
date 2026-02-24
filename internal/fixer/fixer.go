@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -37,8 +38,11 @@ type Progress struct {
 // TODO: Add more options
 // TODO: Disable checkboxes when processing
 type ProcessOptions struct {
-	UseSymlinks   bool
-	WriteMetadata bool
+	UseSymlinks     bool
+	WriteMetadata   bool
+	MonthSubfolders bool
+	IgnoreAlbums    bool
+	Flatten         bool
 }
 
 type FixerContext struct {
@@ -136,10 +140,20 @@ func Process(
 
 			dirPath := filepath.Join(sourcePath, dir.Name())
 			var targetPath string = filepath.Join(outputPath, dir.Name())
-			p = ProcessDirectory(fixerCtx, dirPath, targetPath, p)
+
+			isYearFolder, err := IsYearFolder(dir.Name())
+			if err != nil {
+				Log(LoggerWarn, "Failed to determine if folder is a year folder for %s: %v", dir.Name(), err)
+			}
+			if (options.IgnoreAlbums || options.Flatten) && !isYearFolder {
+				Log(LoggerInfo, "Skipping album folder: %s", dir.Name())
+				continue
+			}
+
+			p = ProcessDirectory(fixerCtx, dirPath, targetPath, isYearFolder, p)
 		}
 	} else {
-		err = ProcessFile(fixerCtx, sourcePath, outputPath)
+		err = ProcessFile(fixerCtx, sourcePath, "", false)
 		if err != nil {
 			Log(LoggerError, "Error processing file: %v", err)
 		} else {
@@ -157,6 +171,7 @@ func ProcessDirectory(
 	fixerCtx *FixerContext,
 	dirPath string,
 	outputPath string,
+	isYearFolder bool,
 	p Progress,
 ) Progress {
 	files, err := os.ReadDir(dirPath)
@@ -173,6 +188,8 @@ func ProcessDirectory(
 	// Channel to capture errors
 	errors := make(chan error)
 
+	sourceDirName := filepath.Base(dirPath)
+
 	var wg sync.WaitGroup
 	workerCount := runtime.NumCPU() * 2 // x2 is faster for IO tasks, x more than that has no effect based on testing
 
@@ -184,7 +201,7 @@ func ProcessDirectory(
 					wg.Done()
 					continue
 				}
-				err := ProcessFile(fixerCtx, imagePath, outputPath)
+				err := ProcessFile(fixerCtx, imagePath, sourceDirName, isYearFolder)
 				if err != nil {
 					errors <- fmt.Errorf("error processing file %s: %w", imagePath, err)
 				} else {
@@ -259,15 +276,11 @@ func ProcessDirectory(
 func ProcessFile(
 	fixerCtx *FixerContext,
 	sourcePath string,
-	outputPath string,
+	sourceDirName string,
+	isYearFolder bool,
 ) error {
 	fileName := filepath.Base(sourcePath)
-	destPath := filepath.Join(outputPath, fileName)
-
-	if _, err := os.Stat(destPath); err == nil {
-		Log(LoggerInfo, "File %s already exists, skipping", destPath)
-		return nil
-	}
+	//destPath := filepath.Join(outputPath, fileName)
 
 	sidecarPath, err := FindSidecar(sourcePath)
 
@@ -287,17 +300,29 @@ func ProcessFile(
 		}
 	}
 
+	outputDir, err := ResolveOutputDir(fixerCtx, sourcePath, sidecarPath, sourceDirName, isYearFolder)
+	if err != nil {
+		return err
+	}
+
+	destPath := filepath.Join(outputDir, fileName)
+
+	if _, err := os.Stat(destPath); err == nil {
+		Log(LoggerInfo, "File %s already exists, skipping", destPath)
+		return nil
+	}
+
 	// Metadata sidecar file not found, copy the file without metadata
 	if sidecarPath == "" {
 		Log(LoggerWarn, "No sidecar file found for %s — copying without metadata", sourcePath)
-		if err := CreateFixedFile(fixerCtx, sourcePath, "", destPath); err != nil {
+		if err := CreateFixedFile(fixerCtx, sourcePath, "", destPath, isYearFolder); err != nil {
 			Log(LoggerError, "Error creating file without sidecar for %s: %v", sourcePath, err)
 			return err
 		}
 		return nil
 	}
 
-	err = CreateFixedFile(fixerCtx, sourcePath, sidecarPath, destPath)
+	err = CreateFixedFile(fixerCtx, sourcePath, sidecarPath, destPath, isYearFolder)
 	if err != nil {
 		Log(LoggerError, "Error creating fixed file for %s: %v", sourcePath, err)
 		return err
@@ -311,6 +336,7 @@ func CreateFixedFile(
 	filePath string,
 	fileMetadataPath string,
 	destPath string,
+	isYearFolder bool,
 ) error {
 	// Ensure output directory exists
 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
@@ -319,9 +345,15 @@ func CreateFixedFile(
 
 	fileName := filepath.Base(destPath)
 
-	isYearFolder, _ := IsYearFolder(filepath.Base(filepath.Dir(destPath)))
-
 	if fixerCtx.Options.UseSymlinks && !isYearFolder {
+		monthFolder := ""
+		if fixerCtx.Options.MonthSubfolders {
+			month, err := DetectFileMonth(filePath, fileMetadataPath)
+			if err == nil {
+				monthFolder = strconv.Itoa(month)
+			}
+		}
+
 		// Attempt to find the file inside of any year folder in the output
 		// TODO: Make this more efficient, whole output directory is being searched every time
 		entries, _ := os.ReadDir(fixerCtx.OutputRoot)
@@ -335,16 +367,23 @@ func CreateFixedFile(
 				continue
 			}
 
-			target := filepath.Join(fixerCtx.OutputRoot, curEntry.Name(), fileName)
-			if _, err := os.Stat(target); err == nil {
-				if err := os.Symlink(target, destPath); err != nil {
-					// Symlink failed, continue with normal copy
-					if !os.IsExist(err) {
-						return fmt.Errorf("Failed to create symlink: %w", err)
+			targetPaths := []string{}
+			if monthFolder != "" {
+				targetPaths = append(targetPaths, filepath.Join(fixerCtx.OutputRoot, curEntry.Name(), monthFolder, fileName))
+			}
+			targetPaths = append(targetPaths, filepath.Join(fixerCtx.OutputRoot, curEntry.Name(), fileName))
+
+			for _, target := range targetPaths {
+				if _, err := os.Stat(target); err == nil {
+					if err := os.Symlink(target, destPath); err != nil {
+						// Symlink failed, continue with normal copy
+						if !os.IsExist(err) {
+							return fmt.Errorf("Failed to create symlink: %w", err)
+						}
+					} else {
+						// Symlink successful
+						return nil
 					}
-				} else {
-					// Symlink successful
-					return nil
 				}
 			}
 		}
@@ -370,4 +409,57 @@ func CreateFixedFile(
 	}
 
 	return nil
+}
+
+func ResolveOutputDir(
+	fixerCtx *FixerContext,
+	sourcePath string,
+	sidecarPath string,
+	sourceDirName string,
+	isYearFolder bool,
+) (string, error) {
+	if fixerCtx.Options.Flatten {
+		return fixerCtx.OutputRoot, nil
+	}
+
+	targetDir := fixerCtx.OutputRoot
+	if sourceDirName != "" /*&& !fixerCtx.Options.IgnoreAlbums && !isYearFolder*/ {
+		targetDir = filepath.Join(targetDir, sourceDirName)
+	}
+
+	if !fixerCtx.Options.MonthSubfolders {
+		return targetDir, nil
+	}
+
+	month, err := DetectFileMonth(sourcePath, sidecarPath)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(targetDir, strconv.Itoa(month)), nil
+}
+
+// Detect the month of a file based on its sidecar metadata
+// Returns the month as an integer between 1 and 12
+func DetectFileMonth(sourcePath string, sidecarPath string) (int, error) {
+	if sidecarPath != "" {
+		metadata, err := ReadJsonMetadata(sidecarPath)
+		if err != nil {
+			return 0, err
+		}
+
+		timestamp, err := strconv.ParseInt(metadata.PhotoTakenTime.Timestamp, 10, 64)
+		if err != nil {
+			return 0, err
+		}
+
+		return int(time.Unix(timestamp, 0).Month()), nil
+	}
+
+	fileInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		return 0, err
+	}
+
+	return int(fileInfo.ModTime().Month()), nil
 }
