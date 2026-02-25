@@ -250,7 +250,8 @@ func Main() {
 		outputButton,
 	)
 
-	checkBoxes := container.NewVBox(
+	CheckBoxRow := container.NewGridWithColumns(
+		2,
 		useLinksCheckbox,
 		writeMetadataCheckbox,
 		ignoreAlbumsCheckbox,
@@ -258,18 +259,14 @@ func Main() {
 		flattenCheckbox,
 	)
 
-	secondRow := container.NewGridWithColumns(
-		2,
-		checkBoxes,
-		container.NewGridWithColumns(2, startButton, cancelButton),
-	)
+	StartCancelRow := container.NewGridWithColumns(2, startButton, cancelButton)
 
 	topContent := container.NewVBox(
 		folderButtons,
-		secondRow,
-
-		progressLabel,
+		CheckBoxRow,
+		StartCancelRow,
 		progressBar,
+		progressLabel,
 	)
 
 	w.SetContent(container.NewBorder(
