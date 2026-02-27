@@ -1,4 +1,4 @@
-# GoogleTakeoutFixer
+# GoogleTakeoutFixer 
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/feloex/GoogleTakeoutFixer?style=flat&color=yellow&link=https%3A%2F%2Fgithub.com%2Ffeloex%2FGoogleTakeoutFixer)](https://github.com/feloex/GoogleTakeoutFixer)
 [![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/feloex/GoogleTakeoutFixer/total?style=flat&color=dark-green)](https://github.com/feloex/GoogleTakeoutFixer/releases)
@@ -64,6 +64,9 @@ To use GoogleTakeoutFixer, you must have downloaded your photos from Google Take
 3. Choose the options that you want to apply:
     - **"Write metadata"**: Writes metadata from JSON files into the media files. May not be necessary.
     - **"Use symlinks for albums"**: Creates file links instead of duplicating files for albums.
+    - **"Ignore album folders"**: Ignores album folders and only processes year folders.
+    - **"Create month subfolders"**: Creates month subfolders (labeled 1-12) inside of the output folders.
+    - **"Flatten folder structure"**: Puts all files directly in the output folder.
 5. Click **"Start processing"** and wait for the process to finish. The time it takes depends on the number of photos and videos you have.
 
 Once the process is complete, you can find your fixed files in the output folder you selected.
@@ -78,6 +81,10 @@ You can also use GoogleTakeoutFixer through the CLI. Use the following flags:
 - `--output "PATH"`: Path to output directory
 - `--symlink`: Use symlinks inside of albums instead of duplicating images
 - `--skip-metadata`: Skip writing metadata to files
+- `--ignore-albums`: Ignore album folders and only process year folders
+- `--month-subfolders`: Create month subfolders (labeled 1-12) inside of folders
+- `--flatten`: Flatten the folder structure and put all files directly in the output folder
+- `--version`: Show version
 - `--help`: Show help message
 
 Example usage:
