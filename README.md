@@ -66,7 +66,7 @@ To use GoogleTakeoutFixer, you must have downloaded your photos from Google Take
     - **"Use symlinks for albums"**: Creates file links instead of duplicating files for albums.
     - **"Ignore album folders"**: Ignores album folders and only processes year folders.
     - **"Create month subfolders"**: Creates month subfolders (labeled 1-12) inside of the output folders.
-    - **"Flatten folder structure"**: Puts all files directly in the output folder.
+    - **"Flatten output structure"**: Puts all files directly in the output folder.
 5. Click **"Start processing"** and wait for the process to finish. The time it takes depends on the number of photos and videos you have.
 
 Once the process is complete, you can find your fixed files in the output folder you selected.
