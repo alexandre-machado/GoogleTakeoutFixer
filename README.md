@@ -26,7 +26,7 @@ GoogleTakeoutFixer solves these issues by:
 
 ## Preview
 <p align="center">
-    <img src="images/GTFWindow-v1.3.0.png" alt="GoogleTakeoutFixer Window" width="410"/>
+    <img src="images/GTFWindow-v1.3.0.png" alt="GoogleTakeoutFixer Window" width="460"/>
 </p>
 
 ## Tutorial
