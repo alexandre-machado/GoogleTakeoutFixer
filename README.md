@@ -12,7 +12,7 @@
 A tool to easily clean and organize Google Photos Takeout exports.
 
 ## The Issue
-When you download your files from Google's "Google Photos" service through "Google Takeout", the exported data is **inconsistently organized and often fragmented.**
+When you download your files from Google's "Google Photos" service through "Google Takeout", the exported data is **inconsistently organized and often fragmented/broken.**
 This can lead to problems:
 - Files cannot be reliably sorted or grouped by date or location
 - The export contains unnecessary files and a cluttered folder structure
