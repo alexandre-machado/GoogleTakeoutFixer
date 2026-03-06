@@ -230,6 +230,32 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 	return nil
 }
 
+// GetMajorBrand reads the MajorBrand tag from a file using the persistent exiftool instance
+func GetMajorBrand(filePath string) (string, error) {
+	exifToolMutex.Lock()
+	defer exifToolMutex.Unlock()
+
+	if exifToolCmd == nil {
+		return "", fmt.Errorf("exiftool not initialized")
+	}
+
+	if _, err := fmt.Fprintf(exifToolStdin, "-MajorBrand\n-s3\n-charset\nfilename=utf8\n%s\n-execute\n", filePath); err != nil {
+		return "", err
+	}
+
+	var majorBrand string
+	scanner := bufio.NewScanner(exifToolStdout)
+	for scanner.Scan() {
+		if line := scanner.Text(); line == "{ready}" {
+			break
+		} else if majorBrand == "" && !strings.Contains(line, "Error") {
+			majorBrand = line
+		}
+	}
+
+	return strings.TrimSpace(majorBrand), scanner.Err()
+}
+
 // Determine the timezone at a photo's GPS location using the "latlog" library
 // If no GPS data is available, fall back to local time
 func getPhotoTimezone(lat, lon float64) *time.Location {

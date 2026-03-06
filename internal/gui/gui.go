@@ -48,6 +48,7 @@ func Main() {
 	var flatten bool = false
 	var ignoreAlbums bool = false
 	var monthSubfolders bool = false
+	var restoreMOVExtension bool = false
 
 	progressLabel := widget.NewLabel("")
 	progressLabel.Truncation = fyne.TextTruncateEllipsis
@@ -103,6 +104,11 @@ func Main() {
 		fmt.Println("flatten", flatten)
 	})
 
+	restoreMOVExtensionCheckbox := widget.NewCheck("Restore .MOV file extension", func(value bool) {
+		restoreMOVExtension = value
+		fmt.Println("restore MOV extension", restoreMOVExtension)
+	})
+
 	// Fix conflicting options
 	updateCheckboxStates := func() {
 		setEnabled := func(cb *widget.Check, enabled bool) {
@@ -150,11 +156,12 @@ func Main() {
 		progressCh := make(chan fixer.Progress)
 
 		opts := fixer.ProcessOptions{
-			UseSymlinks:     useSymlinks,
-			WriteMetadata:   writeMetadata,
-			Flatten:         flatten,
-			IgnoreAlbums:    ignoreAlbums,
-			MonthSubfolders: monthSubfolders,
+			UseSymlinks:         useSymlinks,
+			WriteMetadata:       writeMetadata,
+			Flatten:             flatten,
+			IgnoreAlbums:        ignoreAlbums,
+			MonthSubfolders:     monthSubfolders,
+			RestoreMOVExtension: restoreMOVExtension,
 		}
 		go func() {
 			if err := fixer.Process(ctx, inputPath, outputPath, progressCh, opts); err != nil {
@@ -261,6 +268,7 @@ func Main() {
 		ignoreAlbumsCheckbox,
 		monthSubfoldersCheckbox,
 		flattenCheckbox,
+		restoreMOVExtensionCheckbox,
 	)
 
 	StartCancelRow := container.NewGridWithColumns(2, startButton, cancelButton)

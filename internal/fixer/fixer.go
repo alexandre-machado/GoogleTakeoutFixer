@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -38,11 +39,12 @@ type Progress struct {
 // TODO: Add more options
 // TODO: Disable checkboxes when processing
 type ProcessOptions struct {
-	UseSymlinks     bool
-	WriteMetadata   bool
-	MonthSubfolders bool
-	IgnoreAlbums    bool
-	Flatten         bool
+	UseSymlinks         bool
+	WriteMetadata       bool
+	MonthSubfolders     bool
+	IgnoreAlbums        bool
+	Flatten             bool
+	RestoreMOVExtension bool // See issue #2
 }
 
 type FixerContext struct {
@@ -280,6 +282,20 @@ func ProcessFile(
 	isYearFolder bool,
 ) error {
 	fileName := filepath.Base(sourcePath)
+
+	// See issue #2
+	if fixerCtx.Options.RestoreMOVExtension && strings.EqualFold(filepath.Ext(fileName), ".mp4") {
+		majorBrand, err := GetMajorBrand(sourcePath)
+		if err == nil && strings.HasPrefix(majorBrand, "Apple QuickTime") {
+			ext := filepath.Ext(fileName)
+			newName := fileName[:len(fileName)-len(ext)] + ".mov"
+			if ext == ".MP4" {
+				newName = fileName[:len(fileName)-len(ext)] + ".MOV"
+			}
+			fileName = newName
+		}
+	}
+
 	//destPath := filepath.Join(outputPath, fileName)
 
 	sidecarPath, err := FindSidecar(sourcePath)

@@ -45,6 +45,7 @@ func Main() {
 	ignoreAlbums := flag.Bool("ignore-albums", false, "Ignore all album folders")
 	monthSubfolders := flag.Bool("month-subfolders", false, "Create month subfolders (1-12) inside year folders")
 	flatten := flag.Bool("flatten", false, "Put all media files directly in the output folder without year/album subfolders")
+	restoreMOV := flag.Bool("restore-mov", false, "Restore .MOV file extension in case the Major Brand EXIF field says \"Apple QuickTime (.MOV/QT)\"")
 
 	flag.Parse()
 
@@ -62,11 +63,12 @@ func Main() {
 	progressCh := make(chan fixer.Progress)
 
 	options := fixer.ProcessOptions{
-		UseSymlinks:     *useSymlinks,
-		WriteMetadata:   !*skipMetadata,
-		Flatten:         *flatten,
-		IgnoreAlbums:    *ignoreAlbums,
-		MonthSubfolders: *monthSubfolders,
+		UseSymlinks:         *useSymlinks,
+		WriteMetadata:       !*skipMetadata,
+		Flatten:             *flatten,
+		IgnoreAlbums:        *ignoreAlbums,
+		MonthSubfolders:     *monthSubfolders,
+		RestoreMOVExtension: *restoreMOV,
 	}
 
 	go func() {
