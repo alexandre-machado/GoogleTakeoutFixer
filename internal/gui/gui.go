@@ -167,7 +167,7 @@ func Main() {
 			if err := fixer.Process(ctx, inputPath, outputPath, progressCh, opts); err != nil {
 				if ctx.Err() == nil {
 					fyne.Do(func() {
-						fixer.Log(fixer.LoggerError, "Error: "+err.Error())
+						fixer.Log(fixer.LoggerError, "%s", "Error: "+err.Error())
 					})
 				}
 			}
