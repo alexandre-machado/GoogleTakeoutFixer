@@ -90,9 +90,10 @@ func DiscoverDirs(path string) ([]os.DirEntry, error) {
 
 // Find a matching sidecar JSON
 func FindSidecar(imagePath string) (string, error) {
-	// Scan directory non case sensitively for supplemental JSON sidecar files
+	// Scan directory non case sensitively for JSON sidecar files
 	dir := filepath.Dir(imagePath)
-	prefix := strings.ToLower(filepath.Base(imagePath)) + ".supplemental-"
+	base := strings.TrimSuffix(filepath.Base(imagePath), filepath.Ext(imagePath))
+	prefix := strings.ToLower(base)
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
