@@ -97,7 +97,7 @@ func Process(
 		return ctx.Err()
 	}
 
-	if options.WriteMetadata {
+	if options.WriteMetadata || options.RestoreMOVExtension {
 		if err := InitializeExifTool(); err != nil {
 			Log(LoggerError, "Failed to initialize exiftool: %v", err)
 			return err
