@@ -109,6 +109,7 @@ func InitializeExifTool() error {
 	if err != nil {
 		return err
 	}
+	exifToolScanner = bufio.NewScanner(exifToolStdout)
 
 	if err := exifToolCmd.Start(); err != nil {
 		return err
@@ -207,18 +208,22 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 		return fmt.Errorf("Failed to write to exiftool: %v", err)
 	}
 
-	scanner := bufio.NewScanner(exifToolStdout)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.Contains(line, "Error") {
-			return fmt.Errorf("Exiftool error: %s", line)
-		}
+	var exifErr error
+	for exifToolScanner.Scan() {
+		line := exifToolScanner.Text()
 		if line == "{ready}" {
 			break
 		}
+		if strings.Contains(line, "Error") && exifErr == nil {
+			exifErr = fmt.Errorf("Exiftool error: %s", line)
+		}
 	}
 
-	if err := scanner.Err(); err != nil {
+	if exifErr != nil {
+		return exifErr
+	}
+
+	if err := exifToolScanner.Err(); err != nil {
 		return fmt.Errorf("Failed to read from exiftool: %v", err)
 	}
 
@@ -244,16 +249,15 @@ func GetMajorBrand(filePath string) (string, error) {
 	}
 
 	var majorBrand string
-	scanner := bufio.NewScanner(exifToolStdout)
-	for scanner.Scan() {
-		if line := scanner.Text(); line == "{ready}" {
+	for exifToolScanner.Scan() {
+		if line := exifToolScanner.Text(); line == "{ready}" {
 			break
 		} else if majorBrand == "" && !strings.Contains(line, "Error") {
 			majorBrand = line
 		}
 	}
 
-	return strings.TrimSpace(majorBrand), scanner.Err()
+	return strings.TrimSpace(majorBrand), exifToolScanner.Err()
 }
 
 // Determine the timezone at a photo's GPS location using the "latlog" library
@@ -296,8 +300,9 @@ func formatTimezoneOffset(offsetSec int) string {
 
 // Exiftool process variables
 var (
-	exifToolCmd    *exec.Cmd
-	exifToolStdin  io.WriteCloser
-	exifToolStdout io.ReadCloser
-	exifToolMutex  sync.Mutex
+	exifToolCmd     *exec.Cmd
+	exifToolStdin   io.WriteCloser
+	exifToolStdout  io.ReadCloser
+	exifToolScanner *bufio.Scanner
+	exifToolMutex   sync.Mutex
 )
