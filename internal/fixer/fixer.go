@@ -20,10 +20,12 @@ package fixer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -84,15 +86,25 @@ func Process(
 
 	Log(LoggerInfo, "Starting processing with source: %s and output: %s", sourcePath, outputPath)
 
-	// Log total processing time when processing is done
-	startTime := time.Now()
-	defer func() {
-		Log(LoggerInfo, "Total processing time: %s", time.Since(startTime).Round(time.Second))
-		ClearCache()
-	}()
-
 	defer close(progressCh)
 	p := Progress{}
+
+	// Emit a summary and timing line when processing finishes.
+	startTime := time.Now()
+	defer func() {
+		errs, warns := LogCounts()
+		elapsed := time.Since(startTime).Round(time.Second)
+		if errs > 0 {
+			Log(LoggerError, "Finished: %d processed, %d error(s), %d warning(s) — check log for details", p.Processed, errs, warns)
+		} else {
+			Log(LoggerInfo, "Finished: %d processed, %d error(s), %d warning(s)", p.Processed, errs, warns)
+		}
+		Log(LoggerInfo, "Total processing time: %s", elapsed)
+		if path := CurrentLogFilePath(); path != "" {
+			Log(LoggerInfo, "Log file: %s", path)
+		}
+		ClearCache()
+	}()
 
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -153,6 +165,7 @@ func Process(
 				continue
 			}
 
+			Log(LoggerInfo, "Processing directory: %s", dirPath)
 			p = ProcessDirectory(fixerCtx, dirPath, targetPath, isYearFolder, p)
 		}
 	} else {
@@ -200,17 +213,26 @@ func ProcessDirectory(
 	for i := 0; i < workerCount; i++ {
 		go func() {
 			for imagePath := range jobs {
-				if fixerCtx.Ctx.Err() != nil {
-					wg.Done()
-					continue
-				}
-				err := ProcessFile(fixerCtx, imagePath, sourceDirName, isYearFolder)
-				if err != nil {
-					errors <- fmt.Errorf("error processing file %s: %w", imagePath, err)
-				} else {
-					completed <- imagePath
-				}
-				wg.Done()
+				func() {
+					defer wg.Done()
+					// Recover from unexpected panics so a single corrupt file
+					// can't silently kill a worker and stall the whole run.
+					defer func() {
+						if r := recover(); r != nil {
+							errors <- fmt.Errorf("PANIC processing %s: %v\n%s", imagePath, r, debug.Stack())
+						}
+					}()
+
+					if fixerCtx.Ctx.Err() != nil {
+						return
+					}
+					err := ProcessFile(fixerCtx, imagePath, sourceDirName, isYearFolder)
+					if err != nil {
+						errors <- fmt.Errorf("error processing file %s: %w", imagePath, err)
+					} else {
+						completed <- imagePath
+					}
+				}()
 			}
 		}()
 	}
@@ -282,7 +304,27 @@ func ProcessFile(
 	sourceDirName string,
 	isYearFolder bool,
 ) error {
+	// Early skip for cloud-sync placeholders (OneDrive Files On-Demand, etc.).
+	// Copying these would produce zero-byte output files — skip and tell the
+	// user to hydrate the source folder instead. os.Stat does not trigger a
+	// download, so this check is safe and cheap.
+	if srcInfo, err := os.Stat(sourcePath); err == nil {
+		if isCloudPlaceholder(srcInfo) || srcInfo.Size() == 0 {
+			Log(LoggerWarn, "Source %s is a cloud placeholder (not downloaded locally). Hydrate the source folder (OneDrive → Always keep on this device) and retry — skipping.", sourcePath)
+			return nil
+		}
+	}
+
 	fileName := filepath.Base(sourcePath)
+
+	// Extensionless files: detect the actual format via magic bytes and
+	// append the correct extension so the output file is recognisable.
+	if filepath.Ext(fileName) == "" {
+		if ext := detectExtensionByMagic(sourcePath); ext != "" {
+			Log(LoggerInfo, "Extensionless file %s detected as %s — renaming output to %s%s", fileName, ext, fileName, ext)
+			fileName = fileName + ext
+		}
+	}
 
 	// See issue #2
 	if fixerCtx.Options.RestoreMOVExtension && strings.EqualFold(filepath.Ext(fileName), ".mp4") {
@@ -418,7 +460,11 @@ func CreateFixedFile(
 	if fixerCtx.Options.WriteMetadata && fileMetadataPath != "" {
 		metadata, err := ReadJsonMetadata(fileMetadataPath)
 		if err != nil {
-			Log(LoggerError, "Failed to read metadata from %s: %v", fileMetadataPath, err)
+			if errors.Is(err, ErrSidecarOffline) {
+				Log(LoggerWarn, "Sidecar %s is a cloud placeholder (not downloaded locally). Hydrate the source folder and retry — copied without metadata.", fileMetadataPath)
+			} else {
+				Log(LoggerError, "Failed to read metadata from %s: %v", fileMetadataPath, err)
+			}
 		} else {
 			// Only apply metadata if reading was successful
 			err = ApplyMetadata(destPath, metadata)

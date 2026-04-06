@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package fixer
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -86,6 +87,14 @@ var imageExtensions = map[string]struct{}{
 	".jpeg": {},
 	".png":  {},
 	".heic": {},
+	".heif": {}, // HEIF container — same format as HEIC, different extension
+	".gif":  {},
+	".nef":  {}, // Nikon RAW
+	".dng":  {}, // Adobe Digital Negative RAW (common in Android exports)
+	".webp": {}, // WebP (used by modern Android/Chrome)
+	".bmp":  {},
+	".tiff": {},
+	".tif":  {},
 }
 
 var videoExtensions = map[string]struct{}{
@@ -93,6 +102,10 @@ var videoExtensions = map[string]struct{}{
 	".mov": {},
 	".avi": {},
 	".mkv": {},
+	".3gp": {}, // 3GPP — old Android video format
+	".m4v": {}, // Apple video container (essentially MP4)
+	".wmv": {},
+	".flv": {},
 }
 
 // Checks whether a file is a video file based on its extension
@@ -139,23 +152,223 @@ func DiscoverDirs(path string) ([]os.DirEntry, error) {
 	return dirList, nil
 }
 
+const supplementalSuffix = ".supplemental-metadata"
+
+// isSupplementalMatch checks if a lowercased json filename matches the pattern
+// "imageNameLower + <truncated .supplemental-metadata> + .json".
+// Uses prefix+suffix matching instead of exact byte-length computation to handle
+// double-encoded UTF-8 filenames (e.g. from OneDrive sync).
+func isSupplementalMatch(jsonLower string, imageNameLower string) bool {
+	if !strings.HasSuffix(jsonLower, ".json") {
+		return false
+	}
+	jsonBase := strings.TrimSuffix(jsonLower, ".json")
+	if !strings.HasPrefix(jsonBase, imageNameLower) {
+		return false
+	}
+	remainder := jsonBase[len(imageNameLower):]
+	// remainder should be a prefix of ".supplemental-metadata" (possibly truncated)
+	return len(remainder) > 0 && strings.HasPrefix(supplementalSuffix, remainder)
+}
+
 // Find a matching sidecar JSON
 func FindSidecar(imagePath string) (string, error) {
-	// Scan directory non case sensitively for JSON sidecar files
 	dir := filepath.Dir(imagePath)
-	base := strings.TrimSuffix(filepath.Base(imagePath), filepath.Ext(imagePath))
+	imageName := filepath.Base(imagePath)
+	base := strings.TrimSuffix(imageName, filepath.Ext(imageName))
 	prefix := strings.ToLower(base)
+	ext := strings.ToLower(filepath.Ext(imageName))
 
 	entries, err := ReadDirCached(dir)
 	if err != nil {
 		return "", err
 	}
 
+	imageNameLower := strings.ToLower(imageName)
+
+	// 1. Try exact matches first
 	for _, entry := range entries {
 		name := entry.Name()
 		lower := strings.ToLower(name)
-		if strings.HasPrefix(lower, prefix) && strings.HasSuffix(lower, ".json") {
+		if !strings.HasSuffix(lower, ".json") {
+			continue
+		}
+
+		// Standard: image.jpg.json
+		if lower == imageNameLower+".json" {
 			return filepath.Join(dir, name), nil
+		}
+
+		// Alternative: image.json
+		if strings.TrimSuffix(lower, ".json") == prefix {
+			return filepath.Join(dir, name), nil
+		}
+
+		// Supplemental metadata: Google Takeout creates sidecars like
+		// "image.jpg.supplemental-metadata.json", truncated to ~51 chars.
+		// Instead of computing exact byte length (which breaks with double-encoded UTF-8),
+		// use prefix+suffix matching: json starts with imageName and the middle part
+		// is a prefix of ".supplemental-metadata".
+		// Two variants: "image.jpg.supplemental-metadata.json" and "image.supplemental-metadata.json"
+		if isSupplementalMatch(lower, imageNameLower) || isSupplementalMatch(lower, prefix) {
+			return filepath.Join(dir, name), nil
+		}
+	}
+
+	// 2. Fallback for Google Photos duplicates (e.g. "image(1).jpg" -> "image.jpg.supplemental-metadata(1).json")
+	duplicateRegex := regexp.MustCompile(`^(.*)\((\d+)\)$`)
+	if match := duplicateRegex.FindStringSubmatch(prefix); match != nil {
+		realBase := match[1]
+		num := match[2]
+
+		expectedJson1 := fmt.Sprintf("%s%s.supplemental-metadata(%s).json", realBase, ext, num)
+		expectedJson2 := fmt.Sprintf("%s%s(%s).json", realBase, ext, num)
+		expectedJson3 := fmt.Sprintf("%s(%s).json", realBase, num)
+		expectedJson4 := fmt.Sprintf("%s.supplemental-metadata(%s).json", realBase, num)
+
+		// Also build the original image name (without duplicate number) for matching
+		realImageName := realBase + ext
+		numSuffix := fmt.Sprintf("(%s)", num)
+
+		for _, entry := range entries {
+			name := entry.Name()
+			lower := strings.ToLower(name)
+			if lower == expectedJson1 || lower == expectedJson2 || lower == expectedJson3 || lower == expectedJson4 {
+				return filepath.Join(dir, name), nil
+			}
+			// Truncated supplemental for the duplicate filename itself
+			// e.g. "image(2).jpg" -> "image(2).jpg..json"
+			if isSupplementalMatch(lower, imageNameLower) {
+				return filepath.Join(dir, name), nil
+			}
+			// Truncated supplemental with (N) after the truncated suffix
+			// e.g. "image(1).jpg" -> "image.jpg.supplemental-metad(1).json"
+			if strings.HasSuffix(lower, ".json") {
+				jsonBase := strings.TrimSuffix(lower, ".json")
+				for _, baseVariant := range []string{realImageName, realBase} {
+					prefix := baseVariant + "."
+					if strings.HasPrefix(jsonBase, prefix) && strings.HasSuffix(jsonBase, numSuffix) {
+						middle := jsonBase[len(baseVariant) : len(jsonBase)-len(numSuffix)]
+						if strings.HasPrefix(supplementalSuffix, middle) {
+							return filepath.Join(dir, name), nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Fallback for truncated filenames (Google Takeout truncates sidecar names to 51 chars)
+	// Two truncation modes:
+	//   a) The image base name (without ext) is truncated in the JSON filename
+	//   b) The full image name (with ext) is truncated, cutting into the extension
+	//      e.g. "long name.jpg" -> sidecar "long name.j.json" (51 chars total)
+	if len(prefix) >= 40 || len(imageNameLower) > 46 {
+		for _, entry := range entries {
+			name := entry.Name()
+			lower := strings.ToLower(name)
+			if !strings.HasSuffix(lower, ".json") {
+				continue
+			}
+			jsonBase := strings.TrimSuffix(lower, ".json")
+			if len(jsonBase) < 40 {
+				continue
+			}
+			// (a) JSON base is a truncated version of the image base (without ext)
+			if strings.HasPrefix(prefix, jsonBase) {
+				return filepath.Join(dir, name), nil
+			}
+			// (b) JSON base is a truncated version of the full image name (with ext)
+			if strings.HasPrefix(imageNameLower, jsonBase) {
+				return filepath.Join(dir, name), nil
+			}
+		}
+	}
+
+	// 4. Fallback for Google Photos "-edited" files (including "-edited(N)" combos)
+	// e.g. "IMG-edited.jpg" -> "IMG.jpg.json" or "IMG.supplemental-metadata.json"
+	// e.g. "IMG-edited(1).jpg" -> "IMG.jpg.supplemental-metadata(1).json"
+	editedRegex := regexp.MustCompile(`^(.*)-edited(?:\((\d+)\))?$`)
+	if editedMatch := editedRegex.FindStringSubmatch(prefix); editedMatch != nil {
+		prefixOriginal := editedMatch[1]
+		editedNum := editedMatch[2] // may be empty
+		originalImageName := prefixOriginal + ext
+
+		for _, entry := range entries {
+			name := entry.Name()
+			lower := strings.ToLower(name)
+			if !strings.HasSuffix(lower, ".json") {
+				continue
+			}
+			jsonBase := strings.TrimSuffix(lower, ".json")
+
+			// original.json
+			if jsonBase == prefixOriginal {
+				return filepath.Join(dir, name), nil
+			}
+
+			// original.jpg.json
+			if jsonBase == originalImageName {
+				return filepath.Join(dir, name), nil
+			}
+
+			// original.jpg.supplemental-metadata.json or original.supplemental-metadata.json
+			if isSupplementalMatch(lower, originalImageName) || isSupplementalMatch(lower, prefixOriginal) {
+				return filepath.Join(dir, name), nil
+			}
+
+			// For "-edited(N)": look for "original.jpg.supplemental-metadata(N).json" patterns
+			if editedNum != "" {
+				expected1 := fmt.Sprintf("%s.supplemental-metadata(%s).json", originalImageName, editedNum)
+				expected2 := fmt.Sprintf("%s(%s).json", originalImageName, editedNum)
+				expected3 := fmt.Sprintf("%s.supplemental-metadata(%s).json", prefixOriginal, editedNum)
+				expected4 := fmt.Sprintf("%s(%s).json", prefixOriginal, editedNum)
+				if lower == expected1 || lower == expected2 || lower == expected3 || lower == expected4 {
+					return filepath.Join(dir, name), nil
+				}
+			}
+
+			// Truncated long filenames fallback
+			if len(jsonBase) >= 40 {
+				if strings.HasPrefix(prefixOriginal, jsonBase) || strings.HasPrefix(originalImageName, jsonBase) {
+					return filepath.Join(dir, name), nil
+				}
+			}
+		}
+	}
+
+	// 5. Fallback for truncated media filenames with "-edited" or "(N)-edited"
+	// e.g. "longname(2)-edite.jpg" is a truncated "longname(2)-edited.jpg"
+	// Try matching against the sidecar for "longname(2).jpg"
+	if strings.Contains(prefix, "-e") && len(prefix) >= 40 {
+		// Try stripping various truncations of "-edited" (from most complete to least)
+		for _, suffix := range []string{"-edited", "-edite", "-edit", "-edi", "-ed", "-e"} {
+			if !strings.HasSuffix(prefix, suffix) {
+				continue
+			}
+			strippedBase := strings.TrimSuffix(prefix, suffix)
+			strippedImageName := strippedBase + ext
+			for _, entry := range entries {
+				name := entry.Name()
+				lower := strings.ToLower(name)
+				if !strings.HasSuffix(lower, ".json") {
+					continue
+				}
+				jsonBase := strings.TrimSuffix(lower, ".json")
+				if jsonBase == strippedBase || jsonBase == strippedImageName {
+					return filepath.Join(dir, name), nil
+				}
+				if isSupplementalMatch(lower, strippedImageName) || isSupplementalMatch(lower, strippedBase) {
+					return filepath.Join(dir, name), nil
+				}
+				// Truncated sidecar: jsonBase is a prefix of the stripped image name
+				if len(jsonBase) >= 40 {
+					if strings.HasPrefix(strippedBase, jsonBase) || strings.HasPrefix(strippedImageName, jsonBase) {
+						return filepath.Join(dir, name), nil
+					}
+				}
+			}
+			break
 		}
 	}
 
@@ -211,7 +424,71 @@ func IsMediaFile(path string) bool {
 	extension := strings.ToLower(filepath.Ext(path))
 	_, isImage := imageExtensions[extension]
 	_, isVideo := videoExtensions[extension]
-	return isImage || isVideo
+	if isImage || isVideo {
+		return true
+	}
+	// No extension: probe the first few bytes to detect common media formats.
+	// Google Photos sometimes exports files without an extension when the
+	// original upload had none. We check magic bytes to avoid false positives.
+	if extension == "" {
+		return sniffMediaMagic(path)
+	}
+	return false
+}
+
+// detectExtensionByMagic reads up to 12 bytes from path and returns the
+// appropriate file extension (e.g. ".jpg") for known image/video formats,
+// or "" if the format is unrecognised. Used only for extensionless files.
+func detectExtensionByMagic(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	buf := make([]byte, 12)
+	n, err := f.Read(buf)
+	if err != nil || n < 4 {
+		return ""
+	}
+
+	// JPEG: FF D8 FF
+	if buf[0] == 0xFF && buf[1] == 0xD8 && buf[2] == 0xFF {
+		return ".jpg"
+	}
+	// PNG: 89 50 4E 47
+	if buf[0] == 0x89 && buf[1] == 0x50 && buf[2] == 0x4E && buf[3] == 0x47 {
+		return ".png"
+	}
+	// GIF: GIF8
+	if buf[0] == 0x47 && buf[1] == 0x49 && buf[2] == 0x46 && buf[3] == 0x38 {
+		return ".gif"
+	}
+	// WebP: RIFF????WEBP
+	if n >= 12 && buf[0] == 0x52 && buf[1] == 0x49 && buf[2] == 0x46 && buf[3] == 0x46 &&
+		buf[8] == 0x57 && buf[9] == 0x45 && buf[10] == 0x42 && buf[11] == 0x50 {
+		return ".webp"
+	}
+	// HEIC/HEIF and ISO Base Media (MP4, MOV, 3GP, M4V): ftyp box at offset 4
+	if n >= 8 && buf[4] == 0x66 && buf[5] == 0x74 && buf[6] == 0x79 && buf[7] == 0x70 {
+		// Distinguish HEIC/HEIF from video containers by the brand code at offset 8
+		if n >= 12 {
+			brand := string(buf[8:12])
+			switch brand {
+			case "heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1":
+				return ".heic"
+			}
+		}
+		return ".mp4"
+	}
+
+	return ""
+}
+
+// sniffMediaMagic returns true when the file at path begins with the magic
+// bytes of a known image or video format. Used by IsMediaFile for extensionless files.
+func sniffMediaMagic(path string) bool {
+	return detectExtensionByMagic(path) != ""
 }
 
 // Attempts to find an image file with the same base name as the video file
@@ -277,20 +554,22 @@ func CountProcessableFiles(sourcePath string) (int, error) {
 }
 
 // Detect the month of a file based on its sidecar metadata
-// Returns the month as an integer between 1 and 12
+// Returns the month as an integer between 1 and 12.
+// If the sidecar is missing or is a cloud-sync placeholder
+// (ErrSidecarOffline), it falls back to the source file's mtime so that
+// --month-subfolders continues to work during batched OneDrive migrations.
 func DetectFileMonth(sourcePath string, sidecarPath string) (int, error) {
 	if sidecarPath != "" {
 		metadata, err := ReadJsonMetadata(sidecarPath)
-		if err != nil {
+		if err == nil {
+			timestamp, tErr := strconv.ParseInt(metadata.PhotoTakenTime.Timestamp, 10, 64)
+			if tErr == nil {
+				return int(time.Unix(timestamp, 0).Month()), nil
+			}
+		} else if !errors.Is(err, ErrSidecarOffline) {
 			return 0, err
 		}
-
-		timestamp, err := strconv.ParseInt(metadata.PhotoTakenTime.Timestamp, 10, 64)
-		if err != nil {
-			return 0, err
-		}
-
-		return int(time.Unix(timestamp, 0).Month()), nil
+		// Offline placeholder: fall through to mtime fallback below.
 	}
 
 	fileInfo, err := os.Stat(sourcePath)

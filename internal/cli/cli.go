@@ -40,6 +40,9 @@ func Main() {
 	showVersion := flag.Bool("version", false, "Show current version")
 	inputPath := flag.String("input", "", "Path to Google takeout directory")
 	outputPath := flag.String("output", "", "Path to output directory")
+	scanPath := flag.String("scan", "", "Scan a takeout folder and report media files without matching .json sidecars")
+	scanLimit := flag.Int("scan-limit", 0, "Limit how many media files to scan (0 = unlimited)")
+	scanVerbose := flag.Bool("scan-verbose", false, "Show byte-level debug info for unmatched files")
 	useSymlinks := flag.Bool("symlink", false, "Use symlinks inside of albums instead of duplicating images")
 	skipMetadata := flag.Bool("skip-metadata", false, "Skip writing metadata to files")
 	ignoreAlbums := flag.Bool("ignore-albums", false, "Ignore all album folders")
@@ -51,6 +54,11 @@ func Main() {
 
 	if *showVersion {
 		fmt.Println(version.Tag)
+		return
+	}
+
+	if *scanPath != "" {
+		runScan(*scanPath, *scanLimit, *scanVerbose)
 		return
 	}
 
@@ -88,9 +96,10 @@ func Main() {
 		RestoreMOVExtension: *restoreMOV,
 	}
 
+	var processErr error
 	go func() {
-		// Invert skipMetadata because the flag is named skipMetadata but the process function expects writeMetadata
 		if err := fixer.Process(context.Background(), *inputPath, *outputPath, progressCh, options); err != nil {
+			processErr = err
 			fmt.Printf("Error during processing: %v\n", err)
 		}
 	}()
@@ -110,5 +119,26 @@ func Main() {
 		)
 	}
 
-	fmt.Println("\nDone")
+	errs, warns := fixer.LogCounts()
+	if errs > 0 || processErr != nil {
+		fmt.Printf("\nDone — %d error(s), %d warning(s). Check log for details: %s\n", errs, warns, fixer.CurrentLogFilePath())
+		os.Exit(1)
+	}
+	fmt.Printf("\nDone — %d error(s), %d warning(s)\n", errs, warns)
+}
+
+func runScan(scanPath string, limit int, verbose bool) {
+	fmt.Printf("Scanning: %s\n", scanPath)
+	if limit > 0 {
+		fmt.Printf("Limit: first %d media files\n", limit)
+	}
+	fmt.Println()
+
+	result, err := fixer.Scan(scanPath, limit, verbose)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Print(fixer.FormatScanResult(result))
 }

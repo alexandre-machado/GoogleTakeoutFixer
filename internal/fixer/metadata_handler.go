@@ -21,6 +21,7 @@ package fixer
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -37,6 +38,13 @@ import (
 	"github.com/bradfitz/latlong"
 )
 
+// ErrSidecarOffline is returned when a sidecar JSON appears to be a
+// cloud-sync placeholder (e.g., OneDrive Files On-Demand) that has not
+// been downloaded locally. Callers should treat this as a hydration
+// problem rather than a corrupt JSON and surface a clear instruction
+// to the user instead of a generic parse error.
+var ErrSidecarOffline = errors.New("sidecar is a cloud placeholder (not downloaded locally)")
+
 // Struct to hold the structure of the JSON metadata
 type imageMetadata struct {
 	Title          string `json:"title"`
@@ -50,11 +58,27 @@ type imageMetadata struct {
 		Longitude float64 `json:"longitude"`
 		Altitude  float64 `json:"altitude"`
 	} `json:"geoData"`
+	GeoDataExif struct {
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+		Altitude  float64 `json:"altitude"`
+	} `json:"geoDataExif"`
 }
 
-// Reads JSON and returns some of its metadata contents using the imageMetadata struct
+// Reads JSON and returns some of its metadata contents using the imageMetadata struct.
+// Returns ErrSidecarOffline if the sidecar is detected as a cloud-sync placeholder
+// rather than a genuine JSON parse error.
 func ReadJsonMetadata(jsonPath string) (imageMetadata, error) {
 	var data imageMetadata
+
+	// Cheap pre-check via os.Stat: on Windows this detects NTFS Cloud Files
+	// placeholders (OneDrive / iCloud) without triggering hydration, and the
+	// zero-size heuristic works cross-platform.
+	if info, err := os.Stat(jsonPath); err == nil {
+		if isCloudPlaceholder(info) || info.Size() == 0 {
+			return data, ErrSidecarOffline
+		}
+	}
 
 	jsonFile, err := os.Open(jsonPath)
 	if err != nil {
@@ -65,6 +89,14 @@ func ReadJsonMetadata(jsonPath string) (imageMetadata, error) {
 	byteValue, err := io.ReadAll(jsonFile)
 	if err != nil {
 		return data, err
+	}
+
+	// Final defense: an otherwise-valid-looking file whose first byte is NUL
+	// is almost certainly a zero-padded cloud placeholder that slipped past
+	// the stat check (some sync clients report a fake size). Any real JSON
+	// starts with '{', '[', whitespace, or a BOM — never NUL.
+	if len(byteValue) == 0 || byteValue[0] == 0x00 {
+		return data, ErrSidecarOffline
 	}
 
 	return data, json.Unmarshal(byteValue, &data)
@@ -140,7 +172,18 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 	utcTime := time.Unix(timestampInt, 0).UTC()
 
 	// Determine timezone at the photo's GPS location.
-	photoLoc := getPhotoTimezone(meta.GeoData.Latitude, meta.GeoData.Longitude)
+	lat := meta.GeoData.Latitude
+	lon := meta.GeoData.Longitude
+	alt := meta.GeoData.Altitude
+
+	// Fallback to GeoDataExif if GeoData is empty (Google Takeout quirk)
+	if lat == 0 && lon == 0 {
+		lat = meta.GeoDataExif.Latitude
+		lon = meta.GeoDataExif.Longitude
+		alt = meta.GeoDataExif.Altitude
+	}
+
+	photoLoc := getPhotoTimezone(lat, lon)
 	localTime := utcTime.In(photoLoc)
 	_, offsetSec := localTime.Zone()
 	offsetStr := formatTimezoneOffset(offsetSec)
@@ -173,9 +216,7 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 
 	// If geodata exists, add it to args
 	// EXIF uses N E S W for geodata
-	if meta.GeoData.Latitude != 0 && meta.GeoData.Longitude != 0 {
-		lat, lon := meta.GeoData.Latitude, meta.GeoData.Longitude
-
+	if lat != 0 && lon != 0 {
 		latRef, lonRef := "N", "E"
 		if lat < 0 {
 			latRef = "S"
@@ -189,7 +230,7 @@ func ApplyMetadata(filePath string, meta imageMetadata) error {
 			fmt.Sprintf("-GPSLatitudeRef=%s", latRef),
 			fmt.Sprintf("-GPSLongitude=%f", math.Abs(lon)),
 			fmt.Sprintf("-GPSLongitudeRef=%s", lonRef),
-			fmt.Sprintf("-GPSAltitude=%f", meta.GeoData.Altitude),
+			fmt.Sprintf("-GPSAltitude=%f", alt),
 		)
 	}
 
