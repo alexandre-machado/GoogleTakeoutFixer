@@ -124,6 +124,10 @@ func Main() {
 		fmt.Printf("\nDone — %d error(s), %d warning(s). Check log for details: %s\n", errs, warns, fixer.CurrentLogFilePath())
 		os.Exit(1)
 	}
+	if warns > 0 {
+		fmt.Printf("\nDone — %d error(s), %d warning(s). Check log for details: %s\n", errs, warns, fixer.CurrentLogFilePath())
+		os.Exit(2)
+	}
 	fmt.Printf("\nDone — %d error(s), %d warning(s)\n", errs, warns)
 }
 

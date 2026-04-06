@@ -547,9 +547,6 @@ func CountProcessableFiles(sourcePath string) (int, error) {
 		}
 	}
 
-	if count == 0 {
-		return 0, fmt.Errorf("no media files found in folder structure")
-	}
 	return count, nil
 }
 

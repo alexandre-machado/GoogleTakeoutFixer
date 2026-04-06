@@ -119,7 +119,9 @@ if ($FixerExe -ne "" -and (Test-Path $FixerExe)) {
 }
 
 # 2. Load state and ensure folders exist
-$progress = if (Test-Path $stateFile) { Get-Content $stateFile | ConvertFrom-Json } else { @{ completed = @() } }
+$progress = if (Test-Path $stateFile) { Get-Content $stateFile | ConvertFrom-Json } else { @{ completed = @(); completedWithWarnings = @() } }
+# Ensure the completedWithWarnings field exists in older state files
+if ($null -eq $progress.completedWithWarnings) { $progress | Add-Member -NotePropertyName completedWithWarnings -NotePropertyValue @() }
 if (!(Test-Path $tempBase)) { New-Item -ItemType Directory -Path $tempBase | Out-Null }
 if (!(Test-Path $rawPath)) { New-Item -ItemType Directory -Path $rawPath | Out-Null }
 if (!(Test-Path $stagingPath)) { New-Item -ItemType Directory -Path $stagingPath | Out-Null }
@@ -163,7 +165,8 @@ while ($keepRunning) {
     Write-Host "===============================================" -ForegroundColor Cyan
 
     $allFolders = Get-ChildItem -Path $SourceBase -Directory | Select-Object -ExpandProperty Name
-    $pendingFolders = $allFolders | Where-Object { $_ -notin $progress.completed }
+    $doneFolders = @($progress.completed) + @($progress.completedWithWarnings)
+    $pendingFolders = $allFolders | Where-Object { $_ -notin $doneFolders }
 
     if ($pendingFolders.Count -eq 0) {
         Write-Host "Done! All folders have been processed." -ForegroundColor Green
@@ -218,6 +221,7 @@ while ($keepRunning) {
     }
 
     Write-Host "`n>>> PROCESSING: $selectedFolder (space approved)" -ForegroundColor White -BackgroundColor Blue
+    $batchHadWarnings = $false
 
     # --- STEP 1: COPY FROM ONEDRIVE (HYDRATE) ---
     # robocopy is the correct tool here: reading each file forces OneDrive to
@@ -393,9 +397,9 @@ public class Win32FileAttr {
         Set-Location $ProjectRoot
         try {
             if ($useExe) {
-                & $FixerExe @fixerArgs 2>&1 | Tee-Object -LiteralPath $batchLogFile -Append
+                & $FixerExe @fixerArgs 2>&1 | Tee-Object -FilePath $batchLogFile -Append
             } else {
-                & go run ./cmd @fixerArgs 2>&1 | Tee-Object -LiteralPath $batchLogFile -Append
+                & go run ./cmd @fixerArgs 2>&1 | Tee-Object -FilePath $batchLogFile -Append
             }
         } finally {
             Set-Location $oldDir
@@ -406,6 +410,11 @@ public class Win32FileAttr {
 
         if ($LASTEXITCODE -eq 0) {
             $processedOk = $true
+        } elseif ($LASTEXITCODE -eq 2) {
+            # Exit code 2 = completed with warnings (no errors, but some files skipped)
+            $processedOk = $true
+            $batchHadWarnings = $true
+            Write-Host "  Fixer completed with warnings (exit code 2). Review the log." -ForegroundColor Yellow
         } else {
             Write-Host "Fixer failed (exit code $LASTEXITCODE). See log above for details." -ForegroundColor Red
         }
@@ -416,7 +425,17 @@ public class Win32FileAttr {
     # --- STEP 3: RELEASE RAW + MOVE STAGING -> PROCESSED ---
     Write-Host "`n[3/3] Releasing Raw and preparing batch for upload..." -ForegroundColor Cyan
     if (!$DryRun) {
-        if (Test-Path -LiteralPath $currentRaw) { Remove-Item -LiteralPath $currentRaw -Recurse -Force }
+        if (Test-Path -LiteralPath $currentRaw) {
+            # Brief wait in case the fixer process still holds file handles.
+            Start-Sleep -Seconds 2
+            try {
+                Remove-Item -LiteralPath $currentRaw -Recurse -Force -ErrorAction Stop
+            } catch {
+                Write-Host "  [WARN] Could not delete Raw folder (file in use?): $_" -ForegroundColor Yellow
+                Write-Host "  Raw\$selectedFolder will be cleaned up on the next run." -ForegroundColor Yellow
+                $batchHadWarnings = $true
+            }
+        }
 
         if (Test-Path -LiteralPath $currentStaging) {
             # Disambiguate if Processed already has this batch name
@@ -440,14 +459,22 @@ public class Win32FileAttr {
         }
     }
 
-    # Mark as dispatched (processed + waiting for manual upload) so it
-    # isn't picked up again on the next iteration.
-    if ($selectedFolder -notin $progress.completed) {
-        $progress.completed += $selectedFolder
-        Save-State
+    # Mark as dispatched so it isn't picked up again on the next iteration.
+    # Batches with non-fatal warnings go to completedWithWarnings for review;
+    # clean batches go to completed.
+    if ($batchHadWarnings) {
+        if ($selectedFolder -notin $progress.completedWithWarnings) {
+            $progress.completedWithWarnings += $selectedFolder
+            Save-State
+        }
+        Write-Host "`nBatch '$selectedFolder' dispatched with warnings — review the log." -ForegroundColor Yellow
+    } else {
+        if ($selectedFolder -notin $progress.completed) {
+            $progress.completed += $selectedFolder
+            Save-State
+        }
+        Write-Host "`nBatch '$selectedFolder' dispatched." -ForegroundColor Green
     }
-
-    Write-Host "`nBatch '$selectedFolder' dispatched." -ForegroundColor Green
     Start-Sleep -Seconds 2
 }
 

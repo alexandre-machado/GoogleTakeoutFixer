@@ -123,6 +123,10 @@ func Process(
 		Log(LoggerError, "Error counting images: %v", err)
 		return err
 	}
+	if amountImages == 0 {
+		Log(LoggerInfo, "No media files found in folder structure — nothing to process")
+		return nil
+	}
 	p.Total = amountImages
 	progressCh <- p
 
