@@ -237,8 +237,8 @@ while ($keepRunning) {
     $existingBatchFiles  = 0
     $existingZeroBytes   = 0
     $existingCloudStubs  = 0
-    if (Test-Path $currentRaw) {
-        $existingRaw        = Get-ChildItem $currentRaw -Recurse -File -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $currentRaw) {
+        $existingRaw        = Get-ChildItem -LiteralPath $currentRaw -Recurse -File -ErrorAction SilentlyContinue
         $existingBatchFiles = $existingRaw.Count
         $existingZeroBytes  = ($existingRaw | Where-Object { $_.Length -eq 0 }).Count
         $existingCloudStubs = ($existingRaw | Where-Object { ([int]$_.Attributes -band $cloudAttrMask) -ne 0 }).Count
@@ -250,7 +250,7 @@ while ($keepRunning) {
         if ($existingZeroBytes -gt 0 -or $existingCloudStubs -gt 0) {
             $reason = if ($existingCloudStubs -gt 0) { "$existingCloudStubs file(s) with cloud attributes (from old robocopy run)" } else { "$existingZeroBytes zero-byte file(s)" }
             Write-Host "`n[1/3] Raw\$selectedFolder has $reason. Re-copying with fixed flags..." -ForegroundColor Yellow
-            Remove-Item -Path $currentRaw -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $currentRaw -Recurse -Force -ErrorAction SilentlyContinue
         } else {
             Write-Host "`n[1/3] Copying from OneDrive to local disk (Raw)..." -ForegroundColor Cyan
         }
@@ -267,8 +267,8 @@ while ($keepRunning) {
 
             while ($job.State -eq "Running") {
                 $bytes = 0
-                if (Test-Path $dst) {
-                    $bytes = (Get-ChildItem $dst -Recurse -File -ErrorAction SilentlyContinue |
+                if (Test-Path -LiteralPath $dst) {
+                    $bytes = (Get-ChildItem -LiteralPath $dst -Recurse -File -ErrorAction SilentlyContinue |
                               Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
                     if ($null -eq $bytes) { $bytes = 0 }
                 }
@@ -285,7 +285,7 @@ while ($keepRunning) {
         Invoke-Robocopy -src $sourcePath -dst $currentRaw -threads 4 -isDryRun $DryRun
 
         if (!$DryRun) {
-            $rawFiles  = Get-ChildItem $currentRaw -Recurse -File -ErrorAction SilentlyContinue
+            $rawFiles  = Get-ChildItem -LiteralPath $currentRaw -Recurse -File -ErrorAction SilentlyContinue
 
             if ($rawFiles.Count -eq 0) {
                 Write-Host "`n[ERROR] Copy produced no files in '$currentRaw'. Aborting." -ForegroundColor Red
@@ -327,7 +327,7 @@ public class Win32FileAttr {
             }
             if ($stripped -gt 0) {
                 Write-Host "  Stripped cloud-sync attributes from $stripped file(s)." -ForegroundColor Gray
-                $rawFiles = Get-ChildItem $currentRaw -Recurse -File -ErrorAction SilentlyContinue
+                $rawFiles = Get-ChildItem -LiteralPath $currentRaw -Recurse -File -ErrorAction SilentlyContinue
             }
 
             $zeroFiles = $rawFiles | Where-Object { $_.Length -eq 0 }
@@ -348,14 +348,14 @@ public class Win32FileAttr {
                     }
                 }
 
-                $rawFiles  = Get-ChildItem $currentRaw -Recurse -File -ErrorAction SilentlyContinue
+                $rawFiles  = Get-ChildItem -LiteralPath $currentRaw -Recurse -File -ErrorAction SilentlyContinue
                 $zeroFiles = $rawFiles | Where-Object { $_.Length -eq 0 }
 
                 if ($zeroFiles.Count -gt 0) {
                     Write-Host "`n[ERROR] $($zeroFiles.Count) file(s) still 0-byte after Copy-Item retry:" -ForegroundColor Red
                     $zeroFiles | ForEach-Object { Write-Host "  $($_.Name)" -ForegroundColor Red }
                     Write-Host "OneDrive may still be downloading. Wait a moment and re-run." -ForegroundColor Yellow
-                    Remove-Item -Path $currentRaw -Recurse -Force -ErrorAction SilentlyContinue
+                    Remove-Item -LiteralPath $currentRaw -Recurse -Force -ErrorAction SilentlyContinue
                     break
                 }
             }
@@ -386,16 +386,16 @@ public class Win32FileAttr {
         # Pipe through Tee-Object so the fixer's stdout/stderr lands both on
         # the console AND in a per-batch log file — PowerShell 7's transcript
         # does not capture external-process output directly.
-        $batchLogFile = Join-Path $ProjectRoot "logs" ("batch-$($selectedFolder -replace '[\\/:*?""<>|]','_')-$(Get-Date -Format 'yyyyMMdd_HHmmss').log")
+        $batchLogFile = Join-Path $ProjectRoot "logs" ("batch-$($selectedFolder -replace '[\\/:*?\[\]""<>|]','_')-$(Get-Date -Format 'yyyyMMdd_HHmmss').log")
         $null = New-Item -ItemType Directory -Path (Join-Path $ProjectRoot "logs") -Force
 
         $oldDir = Get-Location
         Set-Location $ProjectRoot
         try {
             if ($useExe) {
-                & $FixerExe @fixerArgs 2>&1 | Tee-Object -FilePath $batchLogFile -Append
+                & $FixerExe @fixerArgs 2>&1 | Tee-Object -LiteralPath $batchLogFile -Append
             } else {
-                & go run ./cmd @fixerArgs 2>&1 | Tee-Object -FilePath $batchLogFile -Append
+                & go run ./cmd @fixerArgs 2>&1 | Tee-Object -LiteralPath $batchLogFile -Append
             }
         } finally {
             Set-Location $oldDir
@@ -416,23 +416,23 @@ public class Win32FileAttr {
     # --- STEP 3: RELEASE RAW + MOVE STAGING -> PROCESSED ---
     Write-Host "`n[3/3] Releasing Raw and preparing batch for upload..." -ForegroundColor Cyan
     if (!$DryRun) {
-        if (Test-Path $currentRaw) { Remove-Item -Path $currentRaw -Recurse -Force }
+        if (Test-Path -LiteralPath $currentRaw) { Remove-Item -LiteralPath $currentRaw -Recurse -Force }
 
-        if (Test-Path $currentStaging) {
+        if (Test-Path -LiteralPath $currentStaging) {
             # Disambiguate if Processed already has this batch name
-            if (Test-Path $currentProcessed) {
+            if (Test-Path -LiteralPath $currentProcessed) {
                 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
                 $currentProcessed = Join-Path $processedPath "$selectedFolder-$timestamp"
-                Rename-Item -Path $currentStaging -NewName "$selectedFolder-$timestamp"
+                Rename-Item -LiteralPath $currentStaging -NewName "$selectedFolder-$timestamp"
                 $currentStaging = Join-Path $stagingPath "$selectedFolder-$timestamp"
             }
 
-            Move-Item -Path $currentStaging -Destination $processedPath -Force
+            Move-Item -LiteralPath $currentStaging -Destination $processedPath -Force
             Write-Host "Batch ready in Processed as: $(Split-Path $currentProcessed -Leaf)" -ForegroundColor Green
         } else {
             Write-Host "`n[!] ERROR: Staging does not contain the expected folder '$selectedFolder'." -ForegroundColor Red
             Write-Host "GoogleTakeoutFixer may have produced a different layout. Current contents of Staging:" -ForegroundColor Yellow
-            Get-ChildItem $stagingPath -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            Get-ChildItem -LiteralPath $stagingPath -Directory -ErrorAction SilentlyContinue | ForEach-Object {
                 Write-Host "  - $($_.Name)" -ForegroundColor Yellow
             }
             Write-Host "Fix manually and retry. The batch was NOT marked as completed." -ForegroundColor Red
