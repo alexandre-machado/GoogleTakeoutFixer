@@ -114,6 +114,28 @@ You might have to give the executable permissions to run on Linux and macOS usin
 - A simple website for users who are not familiar with Github
 - Pull request and issue template
 
+## Building from source
+
+Requires [Go](https://go.dev/) and a C compiler ([GCC via scoop](https://scoop.sh/) on Windows: `scoop install mingw`). The GUI uses [Fyne](https://fyne.io/) which requires CGO.
+
+**Windows** — use the provided build script:
+```powershell
+# Build both GUI and CLI binaries
+.\scripts\build-windows.ps1
+
+# Build only the CLI binary (for scripting/automation)
+.\scripts\build-windows.ps1 -Target cli
+```
+
+**Linux / macOS:**
+```sh
+# GUI binary
+CGO_ENABLED=1 go build -ldflags "-s -w" -o GoogleTakeoutFixer ./cmd/main.go
+
+# CLI binary
+CGO_ENABLED=1 go build -ldflags "-s -w" -o GoogleTakeoutFixerCLI ./cmd/main.go
+```
+
 ## Credits
 This project modifies metadata using the [ExifTool](https://exiftool.org/) library by **Phil Harvey**. ExifTool is licensed under the Perl Artistic license, or the GNU General Public License (see [here](https://exiftool.org/#license) for more details).
 

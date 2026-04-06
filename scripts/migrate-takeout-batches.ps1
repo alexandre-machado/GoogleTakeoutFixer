@@ -448,6 +448,11 @@ public class Win32FileAttr {
 
             Move-Item -LiteralPath $currentStaging -Destination $processedPath -Force
             Write-Host "Batch ready in Processed as: $(Split-Path $currentProcessed -Leaf)" -ForegroundColor Green
+        } elseif ($processedOk) {
+            # Fixer exited successfully but created no output folder — the batch
+            # contained no media files (e.g. a Google Takeout "notas" folder).
+            # Not an error: mark as completed and continue.
+            Write-Host "No media files in '$selectedFolder' — skipped (nothing to upload)." -ForegroundColor Gray
         } else {
             Write-Host "`n[!] ERROR: Staging does not contain the expected folder '$selectedFolder'." -ForegroundColor Red
             Write-Host "GoogleTakeoutFixer may have produced a different layout. Current contents of Staging:" -ForegroundColor Yellow
