@@ -85,14 +85,26 @@ You can also use GoogleTakeoutFixer through the CLI. Use the following flags:
 - `--ignore-albums`: Ignore album folders and only process year folders
 - `--month-subfolders`: Create month subfolders (labeled 1-12) inside of folders
 - `--flatten`: Flatten the folder structure and put all files directly in the output folder
-- `--restore-mov`: Restore .MOV file extension in case the Major Brand EXIF field says \"Apple QuickTime (.MOV/QT)\" (See #2)
+- `--restore-mov`: Restore .MOV file extension in case the Major Brand EXIF field says "Apple QuickTime (.MOV/QT)" (See #2)
 - `--version`: Show version
 - `--help`: Show help message
 
 Example usage:
 ```sh
 ./GoogleTakeoutFixer --input "/path/to/takeout/Google Photos/" --output "/path/to/output/folder/" --symlink
-``` 
+```
+
+#### Diagnostic scan mode
+
+Before running a full export, you can audit your Takeout folder to find media files that have no matching `.json` sidecar (and would therefore be copied without metadata):
+
+```sh
+./GoogleTakeoutFixer --scan "/path/to/takeout/Google Photos/"
+```
+
+Additional scan flags:
+- `--scan-limit N`: Only inspect the first N unmatched media files (useful for a quick spot-check)
+- `--scan-verbose`: Show byte-level filename debug info for each unmatched file
 
 You might have to give the executable permissions to run on Linux and macOS using `chmod +x GoogleTakeoutFixer` before you can run it through the terminal.
 
