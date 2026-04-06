@@ -8,3 +8,7 @@
 logs/
 scripts/*.log
 scripts/migration-progress.json
+*.exe
+main.exe
+.claude/
+CLAUDE.md
