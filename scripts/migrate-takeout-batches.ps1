@@ -127,7 +127,21 @@ if (!(Test-Path $rawPath)) { New-Item -ItemType Directory -Path $rawPath | Out-N
 if (!(Test-Path $stagingPath)) { New-Item -ItemType Directory -Path $stagingPath | Out-Null }
 if (!(Test-Path $processedPath)) { New-Item -ItemType Directory -Path $processedPath | Out-Null }
 
-function Save-State { $progress | ConvertTo-Json -Depth 5 | Set-Content $stateFile }
+function Save-State { $script:progress | ConvertTo-Json -Depth 5 | Set-Content $stateFile }
+
+function Mark-Completed($folder) {
+    if ($folder -notin $script:progress.completed) {
+        $script:progress.completed = @($script:progress.completed) + @($folder)
+    }
+    Save-State
+}
+
+function Mark-CompletedWithWarnings($folder) {
+    if ($folder -notin $script:progress.completedWithWarnings) {
+        $script:progress.completedWithWarnings = @($script:progress.completedWithWarnings) + @($folder)
+    }
+    Save-State
+}
 
 # Compute a folder's size WITHOUT hydrating its contents. Using the
 # Scripting.FileSystemObject COM component reads the NTFS metadata
@@ -159,14 +173,37 @@ if (!(Get-Command exiftool -ErrorAction SilentlyContinue)) {
 
 # 4. Main loop
 $keepRunning = $true
+$lastSelectedFolder = $null
+$sameFolderRetries = 0
 while ($keepRunning) {
     Write-Host "`n===============================================" -ForegroundColor Cyan
     Write-Host "   Google Photos Automatic Migration Queue     " -ForegroundColor Cyan
     Write-Host "===============================================" -ForegroundColor Cyan
 
-    $allFolders = Get-ChildItem -Path $SourceBase -Directory | Select-Object -ExpandProperty Name
-    $doneFolders = @($progress.completed) + @($progress.completedWithWarnings)
-    $pendingFolders = $allFolders | Where-Object { $_ -notin $doneFolders }
+    # Enumerate source folders using -LiteralPath-equivalent semantics. Trim any
+    # trailing whitespace from the names and drop empty strings, so that invisible
+    # filesystem artifacts (e.g. a "Z " with trailing space that came from an old
+    # OneDrive sync) cannot diverge from what we wrote into the state file.
+    $allFolders = @(
+        Get-ChildItem -LiteralPath $SourceBase -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Name.Trim() } |
+            Where-Object { $_ -ne "" }
+    )
+
+    # Build a case-insensitive HashSet of "done" folders for reliable lookups
+    # that don't depend on PowerShell's -notin behavior with PSCustomObject arrays.
+    $doneSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($n in @($progress.completed))              { if ($n) { [void]$doneSet.Add($n.Trim()) } }
+    foreach ($n in @($progress.completedWithWarnings))  { if ($n) { [void]$doneSet.Add($n.Trim()) } }
+
+    $pendingFolders = @($allFolders | Where-Object { -not $doneSet.Contains($_) })
+
+    Write-Host ("Source folders: {0}  |  Done (clean+warn): {1}  |  Pending: {2}" -f `
+        $allFolders.Count, $doneSet.Count, $pendingFolders.Count) -ForegroundColor Gray
+    if ($pendingFolders.Count -gt 0) {
+        $preview = $pendingFolders | Select-Object -First 5
+        Write-Host ("Next up: {0}" -f ($preview -join " | ")) -ForegroundColor DarkGray
+    }
 
     if ($pendingFolders.Count -eq 0) {
         Write-Host "Done! All folders have been processed." -ForegroundColor Green
@@ -174,6 +211,25 @@ while ($keepRunning) {
     }
 
     $selectedFolder = $pendingFolders[0]
+
+    # Loop guard: if we keep picking the same folder without it moving to
+    # completed, something is silently wrong (state not persisting, name
+    # mismatch, etc.). Abort instead of spinning forever.
+    if ($selectedFolder -eq $lastSelectedFolder) {
+        $sameFolderRetries++
+        if ($sameFolderRetries -ge 3) {
+            Write-Host "`n[ABORT] Loop guard: folder '$selectedFolder' was selected $sameFolderRetries times in a row without leaving pending." -ForegroundColor Red
+            Write-Host "        progress.completed count            : $(@($progress.completed).Count)" -ForegroundColor Yellow
+            Write-Host "        progress.completedWithWarnings count : $(@($progress.completedWithWarnings).Count)" -ForegroundColor Yellow
+            Write-Host "        Is folder in doneSet?                : $($doneSet.Contains($selectedFolder))" -ForegroundColor Yellow
+            Write-Host "        State file: $stateFile" -ForegroundColor Yellow
+            Write-Host "        Inspect the state file and folder name for hidden differences (trailing whitespace, Unicode lookalikes)." -ForegroundColor Yellow
+            break
+        }
+    } else {
+        $lastSelectedFolder = $selectedFolder
+        $sameFolderRetries = 1
+    }
     $sourcePath = Join-Path $SourceBase $selectedFolder
     $currentRaw = Join-Path $rawPath $selectedFolder
     $currentStaging = Join-Path $stagingPath $selectedFolder
@@ -191,7 +247,7 @@ while ($keepRunning) {
 
     $freeSpaceBytes = (Get-PSDrive C).Free
     $freeSpaceGB = [math]::Round($freeSpaceBytes / 1GB, 2)
-
+    Write-Host "Pending batch(es)        : $($pendingFolders.Count)" -ForegroundColor Gray
     Write-Host "Estimated folder size    : $folderSizeGB GB" -ForegroundColor Gray
     Write-Host "Required space (w/ 5%)   : $requiredSpaceGB GB" -ForegroundColor Gray
     Write-Host "Current free space on C: : $freeSpaceGB GB" -ForegroundColor Gray
@@ -207,17 +263,21 @@ while ($keepRunning) {
             Write-Host "Clearing Processed folder to reclaim space..." -ForegroundColor Cyan
             Get-ChildItem -Path $processedPath -Directory | ForEach-Object {
                 Remove-Item -Path $_.FullName -Recurse -Force
-                if ($_.Name -notin $progress.completed) {
-                    $progress.completed += $_.Name
-                }
+                Mark-Completed $_.Name
             }
-            Save-State
             Write-Host "Cleanup done! Recomputing available space..." -ForegroundColor Green
             continue
         } else {
             Write-Host "Paused. Wait for the upload to finish and run the script again." -ForegroundColor Yellow
             break
         }
+    }
+
+    # Skip empty source folders (e.g. placeholder albums in the Takeout export).
+    if ($folderSizeBytes -eq 0) {
+        Write-Host "`n>>> SKIPPING: $selectedFolder (empty folder — nothing to copy)" -ForegroundColor Gray
+        Mark-Completed $selectedFolder
+        continue
     }
 
     Write-Host "`n>>> PROCESSING: $selectedFolder (space approved)" -ForegroundColor White -BackgroundColor Blue
@@ -468,16 +528,10 @@ public class Win32FileAttr {
     # Batches with non-fatal warnings go to completedWithWarnings for review;
     # clean batches go to completed.
     if ($batchHadWarnings) {
-        if ($selectedFolder -notin $progress.completedWithWarnings) {
-            $progress.completedWithWarnings += $selectedFolder
-            Save-State
-        }
+        Mark-CompletedWithWarnings $selectedFolder
         Write-Host "`nBatch '$selectedFolder' dispatched with warnings — review the log." -ForegroundColor Yellow
     } else {
-        if ($selectedFolder -notin $progress.completed) {
-            $progress.completed += $selectedFolder
-            Save-State
-        }
+        Mark-Completed $selectedFolder
         Write-Host "`nBatch '$selectedFolder' dispatched." -ForegroundColor Green
     }
     Start-Sleep -Seconds 2
